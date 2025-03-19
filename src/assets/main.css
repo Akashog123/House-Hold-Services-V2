@@ -1,0 +1,118 @@
+@import './base.css';
+
+#app {
+  width: 100%;
+  font-weight: normal;
+  margin: 0;
+  padding: 0;
+  font-family: "Inter", sans-serif;
+}
+
+.v-application {
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: "Inter", sans-serif !important;
+}
+
+.v-application .v-main {
+  padding: 0 !important;
+}
+
+/* Inter font utility classes */
+.inter-400 {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.inter-500 {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-style: normal;
+}
+
+.inter-600 {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-style: normal;
+}
+
+.inter-700 {
+  font-family: "Inter", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-style: normal;
+}
+
+/* Global utility classes */
+.orbtn {
+  padding: 15px;
+  color: #fff;
+}
+
+/* Override Bootstrap's primary color */
+.bg-primary {
+  background-color: var(--primary) !important;
+}
+
+.text-primary {
+  color: var(--primary) !important;
+}
+
+.border-primary {
+  border-color: var(--primary) !important;
+}
+
+/* Links */
+a,
+.green,
+.green:hover {
+  color: var(--primary);
+  text-decoration: none;
+  transition: 0.2s;
+}
+
+@media (hover: hover) {
+  a:hover,
+  .green:hover {
+    color: var(--primary-light);
+    background-color: rgba(0, 20, 39, 0.1);
+  }
+}
+
+/* Override Bootstrap button styles */
+.btn-primary {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+  background-color: var(--primary-light) !important;
+  border-color: var(--primary-light) !important;
+}
+
+.btn-outline-primary {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus,
+.btn-outline-primary:active {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+@media (min-width: 1024px) {
+  body {
+    display: flex;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+  }
+}

@@ -1,0 +1,128 @@
+/* Common styles for authentication pages */
+.full-height {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Wrapper styles */
+.login-wrapper,
+.register-wrapper {
+  width: 100%;
+  max-width: 600px;
+  padding: 0 16px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Box styles */
+.loginBox,
+.registerBox {
+  width: 100%;
+  margin: 0 auto;
+  border-radius: 12px;
+  border: 1px solid var(--v-theme-borderLight);
+}
+
+.loginBox {
+  max-width: 475px;
+}
+
+.registerBox {
+  max-width: 550px;
+}
+
+/* Background styles */
+.bg-containerBg {
+  background-color: #f5f5f5 !important;
+}
+
+.bg-blur {
+  position: absolute;
+  filter: blur(140px);
+  bottom: 0;
+  left: 0;
+  top: 0;
+  right: 0;
+  overflow: hidden;
+}
+
+.bg-blur::before {
+  content: ' ';
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background-color: #f7dcb3;
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 1;
+}
+
+/* Background circles */
+.round-1 {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background-color: #e76767;
+  position: absolute;
+  bottom: 0;
+  left: -50px;
+  opacity: 1;
+}
+
+.round-2 {
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background-color: #c0e5d9;
+  margin-left: 160px;
+  position: absolute;
+  bottom: 180px;
+  opacity: 1;
+}
+
+/* Common utility classes */
+.text-darkText {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.error-message {
+  padding: 8px;
+  border-radius: 4px;
+  background-color: rgba(244, 67, 54, 0.05);
+}
+
+/* Logo styles */
+.login-logo,
+.register-logo {
+  max-height: 110px;
+  max-width: 110px;
+  object-fit: contain;
+}
+
+/* Link hover effect */
+.link-hover:hover {
+  text-decoration: underline !important;
+  opacity: 0.8;
+}
+
+/* Vuetify specific overrides */
+.loginBox :deep(.v-list) .v-list-item,
+.registerBox :deep(.v-list) .v-list-item {
+  border: 1px solid transparent;
+}
+
+.loginBox :deep(.v-list) .v-list-item:hover,
+.registerBox :deep(.v-list) .v-list-item:hover {
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
+}
+
+.loginBox :deep(.v-label),
+.registerBox :deep(.v-label) {
+  --v-medium-emphasis-opacity: 1;
+  color: rgb(var(--v-theme-lightText));
+}
