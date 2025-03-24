@@ -3,7 +3,7 @@
     <!-- Page Header -->
     <div class="row mb-4">
       <div class="col-12 d-flex justify-content-between align-items-center">
-        <h1 class="h2">Dashboard Overview</h1>
+        <h3>Dashboard Overview</h3>
         <button 
           class="btn btn-primary"
           :disabled="loading"
@@ -16,6 +16,30 @@
             Loading...
           </span>
         </button>
+      </div>
+    </div>
+
+    <!-- Notifications Section -->
+    <div class="row mb-4" v-if="pendingApprovals > 0">
+      <div class="col-12">
+        <div class="card border-warning">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <h5 class="card-title mb-0">
+                  <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                  Pending Approvals
+                </h5>
+                <p class="card-text mt-2 mb-0">
+                  {{ pendingApprovals }} professional registration(s) awaiting your review
+                </p>
+              </div>
+              <router-link to="/admin/approvals" class="btn btn-warning">
+                Review Approvals
+              </router-link>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -36,22 +60,25 @@
             </div>
             <div class="d-flex justify-content-between align-items-center">
               <h2 class="card-title mb-0">{{ stat.value }}</h2>
-              <div v-if="stat.trend !== undefined">
+              <div v-if="stat.trend !== undefined || stat.highlight">
                 <span 
                   class="badge"
-                  :class="stat.trend >= 0 ? 'text-bg-success' : 'text-bg-danger'"
+                  :class="[
+                    stat.highlight && stat.value !== '0' ? 'text-bg-warning' : 
+                    stat.trend >= 0 ? 'text-bg-success' : 'text-bg-danger'
+                  ]"
                 >
-                  <i 
+                  <i v-if="stat.trend !== undefined" 
                     class="bi"
                     :class="stat.trend >= 0 ? 'bi-arrow-up' : 'bi-arrow-down'"
                   ></i>
-                  {{ Math.abs(stat.trend) }}%
                 </span>
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- Error Toast -->
@@ -73,7 +100,6 @@
         </div>
       </div>
     </div>
-  </div>
 </template>
 
 <script>
@@ -126,6 +152,9 @@ export default {
       }
     ])
 
+    // Add a computed property for pending approvals
+    const pendingApprovals = ref(0)
+    
     const fetchDashboardData = async () => {
       loading.value = true
       try {
@@ -133,7 +162,7 @@ export default {
           api.get('/admin/users/stats'),                    
           api.get('/admin/services'), 
           api.get('/admin/professionals', { 
-            params: { approval_status: 'pending' }
+            params: { approved: 'false', active: 'true' } // Explicitly request pending approvals
           }),
           api.get('/admin/analytics/revenue')
         ])
@@ -178,9 +207,13 @@ export default {
         }
 
         // Handle pending approvals data safely
-        const proData = Array.isArray(professionalsResponse.data) ? professionalsResponse.data : [];
-        stats.value[3].value = String(proData.length);
-        stats.value[3].trend = 0;
+        const pendingProfessionals = Array.isArray(professionalsResponse.data) ? professionalsResponse.data : [];
+        stats.value[3].value = String(pendingProfessionals.length);
+        
+        // If this value is greater than 0, make it noticeable
+        if (pendingProfessionals.length > 0) {
+          stats.value[3].highlight = true;
+        }
 
         // Handle revenue data safely
         if (revenueResponse.data && typeof revenueResponse.data.total_revenue !== 'undefined') {
@@ -190,6 +223,21 @@ export default {
         } else {
           stats.value[4].value = '$0.00';
           stats.value[4].trend = 0;
+        }
+
+        // Handle pending approvals count
+        if (Array.isArray(professionalsResponse.data)) {
+          pendingApprovals.value = professionalsResponse.data.length
+          
+          // Update the "Pending Approvals" stat card
+          const pendingApprovalsIndex = stats.value.findIndex(stat => stat.title === 'Pending Approvals')
+          if (pendingApprovalsIndex !== -1) {
+            stats.value[pendingApprovalsIndex].value = String(pendingApprovals.value)
+            // Highlight if there are pending approvals
+            if (pendingApprovals.value > 0) {
+              stats.value[pendingApprovalsIndex].highlight = true
+            }
+          }
         }
 
       } catch (error) {
@@ -217,7 +265,8 @@ export default {
       stats,
       showError,
       errorMessage,
-      fetchDashboardData
+      fetchDashboardData,
+      pendingApprovals
     }
   }
 }

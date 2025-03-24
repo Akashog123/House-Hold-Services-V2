@@ -5,6 +5,7 @@ export default {
     users: [],
     professionals: [],
     selectedUser: null,
+    pendingApprovalCount: 0,
     loading: false,
     error: null
   },
@@ -23,6 +24,9 @@ export default {
       if (index !== -1) {
         state.users.splice(index, 1, updatedUser)
       }
+    },
+    SET_PENDING_APPROVAL_COUNT(state, count) {
+      state.pendingApprovalCount = count
     },
     SET_LOADING(state, status) {
       state.loading = status
@@ -71,11 +75,30 @@ export default {
         throw error
       }
     },
-    async approveUser({ commit }, userId) {
+    async fetchPendingApprovalCount({ commit }) {
+      try {
+        const response = await api.get('/admin/professionals', {
+          params: { approved: 'false', active: 'true' }
+        })
+        
+        const count = Array.isArray(response.data) ? response.data.length : 0
+        commit('SET_PENDING_APPROVAL_COUNT', count)
+        
+        return count
+      } catch (error) {
+        console.error('Failed to fetch pending approval count:', error)
+        return 0
+      }
+    },
+    async approveUser({ commit, dispatch }, userId) {
       try {
         commit('SET_LOADING', true)
         const response = await api.put(`/admin/approve/${userId}`)
         commit('UPDATE_USER', response.data)
+        
+        // Refresh pending approval count
+        dispatch('fetchPendingApprovalCount')
+        
         commit('SET_LOADING', false)
         return response.data
       } catch (error) {
@@ -84,11 +107,18 @@ export default {
         throw error
       }
     },
-    async rejectUser({ commit }, userId) {
+    async rejectUser({ commit, dispatch }, userId) {
       try {
         commit('SET_LOADING', true)
-        const response = await api.put(`/admin/reject/${userId}`)
-        commit('UPDATE_USER', response.data)
+        
+        // Ensure we send an object as the second parameter
+        const response = await api.put(`/admin/reject/${userId}`, {})
+        
+        commit('UPDATE_USER', response.data.user || response.data)
+        
+        // Refresh pending approval count
+        dispatch('fetchPendingApprovalCount')
+        
         commit('SET_LOADING', false)
         return response.data
       } catch (error) {
@@ -130,9 +160,7 @@ export default {
     selectedUser: state => state.selectedUser,
     usersLoading: state => state.loading,
     usersError: state => state.error,
-    pendingApprovalCount: state => state.users.filter(u => 
-      u.role === 'professional' && !u.is_approved && u.is_active
-    ).length,
+    pendingApprovalCount: state => state.pendingApprovalCount,
     nonAdminUsers: state => {
       return state.users.filter(user => user.role !== 'admin');
     },

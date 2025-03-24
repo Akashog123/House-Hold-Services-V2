@@ -49,8 +49,10 @@ class UserService {
   }
   
   // Admin: Reject professional
-  rejectProfessional(userId) {
-    return api.put(`/admin/reject/${userId}`);
+  rejectProfessional(userId, rejectionReason = '') {
+    return api.put(`/admin/reject/${userId}`, {
+      rejection_reason: rejectionReason
+    });
   }
   
   // Admin: Block user

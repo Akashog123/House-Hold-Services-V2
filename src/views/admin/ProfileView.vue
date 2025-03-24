@@ -1,6 +1,6 @@
 <template>
   <div class="profile-container">
-    <h1>Admin Profile</h1>
+    <h3>Admin Profile</h3>
 
       <div class="card">
         <div class="card-body">

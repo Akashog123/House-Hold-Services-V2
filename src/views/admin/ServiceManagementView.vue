@@ -1,7 +1,7 @@
 <template>
   <div class="service-management">
     <div class="d-flex justify-content-between align-items-center mb-4 page-header">
-      <h1 class="h2">Service Management</h1>
+      <h3>Service Management</h3>
       <button class="btn btn-primary" @click="openCreateModal">
         <i class="bi bi-plus-lg me-2"></i>Add New Service
       </button>
@@ -297,10 +297,7 @@ export default {
         const response = await adminService.getAllServices()
         console.log("Services response:", response)
         
-        // Make sure we're working with the nested data returned from the API
-        if (response.data && response.data.data) {
-          services.value = response.data.data
-        } else if (Array.isArray(response.data)) {
+        if (Array.isArray(response.data)) {
           services.value = response.data
         } else {
           console.error("Unexpected services response format:", response)
@@ -536,23 +533,45 @@ export default {
         loading.value = true;
         formError.value = null;
   
+        // Log initial state
+        console.log(`Before toggle - Service ID: ${service.id}, Current status: ${service.status}`);
+        
         // Toggle between active and inactive
         const newStatus = service.status === 'inactive' ? 'active' : 'inactive';
+        console.log(`Status to be changed to: ${newStatus}`);
         
-        // Update service with new status
+        // Create a properly formatted service update object with all required fields
         const updatedService = {
-          ...service,
+          name: service.name,
+          base_price: parseFloat(service.base_price) || 0,
+          description: service.description || '',
+          avg_duration: parseInt(service.avg_duration) || 0,
           status: newStatus
         };
         
+        console.log('Sending update to backend:', JSON.stringify(updatedService));
         const response = await adminService.updateService(service.id, updatedService);
-        console.log(`Service status toggled to ${newStatus}`, response);
+        console.log('Full response from backend:', response);
         
-        // Update local service status
-        service.status = newStatus;
+        if (response.data) {
+          console.log('Response data:', JSON.stringify(response.data));
+          
+          const returnedStatus = response.data.status;
+          console.log(`Status returned from backend: ${returnedStatus}`);
+          
+          // Use the status from the response if available
+          service.status = returnedStatus || newStatus;
+        } else {
+          service.status = newStatus;
+        }
+        
+        console.log(`After update - Service ID: ${service.id}, New status: ${service.status}`);
         
         // Show success message
-        showSuccessToast(`Service ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+        showSuccessToast(`Service ${service.status === 'active' ? 'activated' : 'deactivated'} successfully`);
+        
+        // Refresh data from server to ensure consistency
+        await fetchServices();
       } catch (error) {
         console.error('Failed to toggle service status:', error);
         formError.value = error.message || 'Failed to update service status';

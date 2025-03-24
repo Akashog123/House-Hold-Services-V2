@@ -9,7 +9,7 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(128))
     is_approved = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
@@ -34,6 +34,7 @@ class User(db.Model):
         return {
             'id': self.id,
             'username': self.username,
+            'email': self.email,
             'role': self.user_type,
             'full_name': self.full_name,
             'is_approved': self.is_approved,
@@ -57,23 +58,37 @@ class Admin(User):
 
 # Subclass for Service Professionals
 class ServiceProfessional(User):
-    __mapper_args__ = {'polymorphic_identity': 'professional'}
+    __tablename__ = 'service_professionals'
+    
+    id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
+    full_name = db.Column(db.String(100))
+    phone_number = db.Column(db.String(20))
     description = db.Column(db.Text)
     service_type_id = db.Column(db.Integer, db.ForeignKey('services.id'))
-    experience_years = db.Column(db.Integer)
-    service_type = db.relationship('Service', foreign_keys=[service_type_id])
+    experience_years = db.Column(db.Integer, default=0)
     average_rating = db.Column(db.Float, default=0.0)
     total_reviews = db.Column(db.Integer, default=0)
+    documents_verified = db.Column(db.Boolean, default=False)
+    rejection_reason = db.Column(db.Text)
+
+    # Define relationship with service
+    service = db.relationship('Service', foreign_keys=[service_type_id])
+    
+    __mapper_args__ = {
+        'polymorphic_identity': 'professional',
+    }
     
     def to_dict(self):
         data = super().to_dict()
         data.update({
-            'description': self.description,
             'service_type_id': self.service_type_id,
-            'service_type_name': self.service_type.name if self.service_type else None,
+            'description': self.description,
             'experience_years': self.experience_years,
             'average_rating': self.average_rating,
-            'total_reviews': self.total_reviews
+            'total_reviews': self.total_reviews,
+            'documents_verified': self.documents_verified,
+            'documents_count': len(self.documents) if hasattr(self, 'documents') else 0,
+            'service_name': self.service.name if self.service else None
         })
         return data
 
@@ -134,4 +149,30 @@ class Review(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     request = db.relationship('ServiceRequest', backref='reviews')
+
+class Document(db.Model):
+    __tablename__ = 'documents'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    professional_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    document_type = db.Column(db.String(50), nullable=False)  # 'idProof', 'addressProof', 'qualification'
+    filename = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    verified = db.Column(db.Boolean, default=False)
+    
+    professional = db.relationship('ServiceProfessional', backref='documents')
+    
+    def __repr__(self):
+        return f'<Document {self.document_type} for professional {self.professional_id}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'professional_id': self.professional_id,
+            'document_type': self.document_type,
+            'filename': self.filename,
+            'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None,
+            'verified': self.verified
+        }
 

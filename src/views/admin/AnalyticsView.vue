@@ -1,6 +1,6 @@
 <template>
   <div class="analytics-container">
-    <h1>Analytics Dashboard</h1>
+    <h3>Analytics Dashboard</h3>
 
       <!-- Revenue Chart -->
       <div class="card mb-4">

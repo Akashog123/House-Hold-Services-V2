@@ -4,7 +4,9 @@
     <div v-if="false" class="debug-info p-2 bg-warning">
       Auth: {{ isAuthenticated ? 'Yes' : 'No' }} | 
       Role: {{ userRole || 'None' }} |
-      Admin: {{ isAdmin ? 'Yes' : 'No' }}
+      Admin: {{ isAdmin ? 'Yes' : 'No' }} |
+      Professional: {{ isProfessional ? 'Yes' : 'No' }} |
+      Customer: {{ isCustomer ? 'Yes' : 'No' }}
     </div>
     
     <!-- Header -->
@@ -61,7 +63,7 @@
                       Services
                     </router-link>
                   </li>
-                  <li class="nav-item">
+                                    <li class="nav-item">
                     <router-link 
                       to="/admin/analytics" 
                       class="nav-link d-flex align-items-center"
@@ -93,6 +95,16 @@
                     >
                       <i class="bi bi-tools me-2"></i>
                       My Services
+                    </router-link>
+                  </li>
+                  <li class="nav-item">
+                    <router-link 
+                      to="/professional/requests" 
+                      class="nav-link d-flex align-items-center"
+                      active-class="active"
+                    >
+                      <i class="bi bi-list-check me-2"></i>
+                      Service Requests
                     </router-link>
                   </li>
                 </template>
@@ -192,15 +204,27 @@ export default {
       return user?.role || null
     })
     
-    // Role checks with more verbose logging
+    // Role checks with more verbose logging for all roles
     const isAdmin = computed(() => {
       const user = store.getters['auth/user']
       const isAdminRole = user?.role === 'admin'
-      console.log('MainLayout - User:', user, 'Is Admin:', isAdminRole)
+      console.log('MainLayout - Is Admin check:', isAdminRole, 'Role:', user?.role)
       return isAdminRole
     })
-    const isProfessional = computed(() => userRole.value === 'professional')
-    const isCustomer = computed(() => userRole.value === 'customer')
+    
+    const isProfessional = computed(() => {
+      const role = userRole.value
+      const isProfessionalRole = role === 'professional'
+      console.log('MainLayout - Is Professional check:', isProfessionalRole, 'Role:', role)
+      return isProfessionalRole
+    })
+    
+    const isCustomer = computed(() => {
+      const role = userRole.value
+      const isCustomerRole = role === 'customer'
+      console.log('MainLayout - Is Customer check:', isCustomerRole, 'Role:', role)
+      return isCustomerRole
+    })
 
     // Sidebar title based on role
     const sidebarTitle = computed(() => {
@@ -257,14 +281,22 @@ export default {
           // After auth is initialized, force a component update
           console.log('Auth initialized, authenticated:', store.getters['auth/isAuthenticated'])
           console.log('User role after init:', store.getters['auth/user']?.role)
+          
+          // Force re-evaluation of role computeds
+          const role = store.getters['auth/user']?.role
+          console.log('User role detected:', role)
+          console.log('Is professional:', role === 'professional')
+          console.log('Is customer:', role === 'customer')
+          console.log('Is admin:', role === 'admin')
         })
       }
     })
 
-    // Watch route changes to check authentication
+    // Watch route changes to check authentication and role
     watch(() => route.path, () => {
       console.log('Route changed to:', route.path)
       console.log('Auth state after route change:', isAuthenticated.value)
+      console.log('Role after route change:', userRole.value)
     })
 
     return {

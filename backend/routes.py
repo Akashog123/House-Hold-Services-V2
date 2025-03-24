@@ -1,136 +1,417 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from .decorators import admin_required, professional_required, customer_required
-from .models import db, User, ServiceProfessional, Customer, Service, ServiceRequest, Review
+from .models import db, User, ServiceProfessional, Customer, Service, ServiceRequest, Review, Document
 from datetime import datetime
 from sqlalchemy import func
 from datetime import timedelta
+import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 routes_bp = Blueprint('routes', __name__)
 
-# Admin routes for user management
+#=======================================================================
+# ADMIN ROUTES
+#=======================================================================
+
 @routes_bp.route('/admin/users', methods=['GET'])
 @admin_required
 def get_all_users():
+    """Get all users except admin users"""
     try:
-        # Filter out admin users from the query
+        logger.debug("Admin requesting all users")
         users = User.query.filter(User.role != 'admin').all()
+        logger.debug(f"Found {len(users)} non-admin users")
         return jsonify([user.to_dict() for user in users]), 200
     except Exception as e:
+        logger.error(f"Error getting users: {str(e)}")
         return jsonify({'msg': str(e)}), 422
 
 @routes_bp.route('/admin/professionals', methods=['GET'])
 @admin_required
 def get_professionals():
+    """Get all professional users"""
     try:
+        logger.debug("Admin requesting all professionals")
         professionals = ServiceProfessional.query.all()
+        logger.debug(f"Found {len(professionals)} professionals")
         return jsonify([pro.to_dict() for pro in professionals]), 200
     except Exception as e:
+        logger.error(f"Error getting professionals: {str(e)}")
         return jsonify({'msg': str(e)}), 422
+
+@routes_bp.route('/admin/professionals/details', methods=['GET'])
+@admin_required
+def get_professionals_details():
+    """Get detailed information about professionals including approval status and documents"""
+    try:
+        logger.debug("Admin requesting detailed professional information")
+        professionals = ServiceProfessional.query.all()
+        logger.debug(f"Found {len(professionals)} professionals to process")
+        
+        result = []
+        for pro in professionals:
+            # Get documents for this professional
+            documents = Document.query.filter_by(professional_id=pro.id).all()
+            
+            pro_data = pro.to_dict()
+            pro_data['documents_count'] = len(documents)
+            pro_data['documents_verified'] = all(doc.verified for doc in documents) if documents else False
+            
+            # Get service name
+            if pro.service_type_id:
+                service = Service.query.get(pro.service_type_id)
+                pro_data['service_name'] = service.name if service else None
+            
+            result.append(pro_data)
+        
+        logger.debug(f"Returning {len(result)} professional records with details")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error getting professional details: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @routes_bp.route('/admin/customers', methods=['GET'])
 @admin_required
 def get_customers():
+    """Get all customer users"""
     try:
+        logger.debug("Admin requesting all customers")
         customers = Customer.query.all()
+        logger.debug(f"Found {len(customers)} customers")
         return jsonify([customer.to_dict() for customer in customers]), 200
     except Exception as e:
+        logger.error(f"Error getting customers: {str(e)}")
         return jsonify({'msg': str(e)}), 422
 
 @routes_bp.route('/admin/approve/<int:user_id>', methods=['PUT'])
 @admin_required
 def approve_user(user_id):
+    """Approve a user account"""
     try:
+        logger.debug(f"Admin approving user ID: {user_id}")
         user = User.query.get(user_id)
         
         if not user:
+            logger.warning(f"User ID {user_id} not found for approval")
             return jsonify({'error': 'User not found'}), 404
             
+        # For professionals, check if all required documents are verified
+        if user.role == 'professional':
+            # Find all documents for this professional
+            documents = Document.query.filter_by(professional_id=user_id).all()
+            
+            # Check if the professional has uploaded all required documents
+            required_doc_types = ['id_proof', 'address_proof', 'qualification']
+            uploaded_doc_types = [doc.document_type for doc in documents]
+            
+            # We require at least id_proof and address_proof
+            essential_docs = ['id_proof', 'address_proof']
+            missing_docs = [doc_type for doc_type in essential_docs if doc_type not in uploaded_doc_types]
+            
+            if missing_docs:
+                logger.warning(f"Professional is missing required documents: {missing_docs}")
+                return jsonify({
+                    'error': 'Cannot approve professional with missing required documents',
+                    'missing_documents': missing_docs
+                }), 400
+            
+            # Check if all uploaded documents are verified
+            unverified_docs = [doc for doc in documents if not doc.verified]
+            if unverified_docs:
+                logger.warning(f"Professional has unverified documents: {[doc.document_type for doc in unverified_docs]}")
+                return jsonify({
+                    'error': 'Cannot approve professional with unverified documents',
+                    'unverified_documents': [doc.document_type for doc in unverified_docs]
+                }), 400
+        
+        # Update user approval status
         user.is_approved = True
+        
+        # Clear any rejection reason if it exists
+        professional = ServiceProfessional.query.get(user_id)
+        if professional and hasattr(professional, 'rejection_reason'):
+            professional.rejection_reason = None
+        
         db.session.commit()
+        logger.info(f"User ID {user_id} ({user.username}) approved successfully")
         
         return jsonify({'message': 'User approved successfully', 'user': user.to_dict()}), 200
+    
     except Exception as e:
-        return jsonify({'msg': str(e)}), 422
+        db.session.rollback()
+        logger.error(f"Error approving user {user_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 422
 
 @routes_bp.route('/admin/reject/<int:user_id>', methods=['PUT'])
 @admin_required
 def reject_user(user_id):
+    """Reject a user account with optional reason"""
     try:
+        logger.debug(f"Admin rejecting user ID: {user_id}")
         user = User.query.get(user_id)
         
         if not user:
+            logger.warning(f"User ID {user_id} not found for rejection")
             return jsonify({'error': 'User not found'}), 404
-            
+        
+        # Update user approval status
         user.is_approved = False
+        
+        # If it's a professional and a rejection reason is provided, store it
+        if user.role == 'professional':
+            data = request.get_json() or {}
+            rejection_reason = data.get('rejection_reason')
+            
+            if rejection_reason:
+                logger.debug(f"Rejection reason provided: {rejection_reason}")
+                professional = ServiceProfessional.query.get(user_id)
+                if professional:
+                    professional.rejection_reason = rejection_reason
+        
         db.session.commit()
+        logger.info(f"User ID {user_id} ({user.username}) rejected successfully")
         
         return jsonify({'message': 'User rejected successfully', 'user': user.to_dict()}), 200
     except Exception as e:
-        return jsonify({'msg': str(e)}), 422
+        db.session.rollback()
+        logger.error(f"Error rejecting user {user_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @routes_bp.route('/admin/block/<int:user_id>', methods=['PUT'])
 @admin_required
 def block_user(user_id):
+    """Block (deactivate) a user account"""
     try:
+        logger.debug(f"Admin blocking user ID: {user_id}")
         user = User.query.get(user_id)
         
         if not user:
+            logger.warning(f"User ID {user_id} not found for blocking")
             return jsonify({'error': 'User not found'}), 404
             
         user.is_active = False
         db.session.commit()
+        logger.info(f"User ID {user_id} ({user.username}) blocked successfully")
         
         return jsonify({'message': 'User blocked successfully', 'user': user.to_dict()}), 200
     except Exception as e:
+        logger.error(f"Error blocking user {user_id}: {str(e)}")
         return jsonify({'msg': str(e)}), 422
 
 @routes_bp.route('/admin/unblock/<int:user_id>', methods=['PUT'])
 @admin_required
 def unblock_user(user_id):
+    """Unblock (reactivate) a user account"""
     try:
+        logger.debug(f"Admin unblocking user ID: {user_id}")
         user = User.query.get(user_id)
         
         if not user:
+            logger.warning(f"User ID {user_id} not found for unblocking")
             return jsonify({'error': 'User not found'}), 404
             
         user.is_active = True
         db.session.commit()
+        logger.info(f"User ID {user_id} ({user.username}) unblocked successfully")
         
         return jsonify({'message': 'User unblocked successfully', 'user': user.to_dict()}), 200
     except Exception as e:
+        logger.error(f"Error unblocking user {user_id}: {str(e)}")
         return jsonify({'msg': str(e)}), 422
 
-# Admin routes for service management
+@routes_bp.route('/admin/search-professionals', methods=['GET'])
+@admin_required
+def search_professionals():
+    """Search professionals with filters"""
+    try:
+        # Get query parameters
+        username = request.args.get('username')
+        approval_status = request.args.get('approved')
+        active_status = request.args.get('active')
+        include_verification = request.args.get('include_verification', 'false').lower() == 'true'
+        
+        logger.debug(f"Admin searching professionals with filters: username={username}, approved={approval_status}, active={active_status}, include_verification={include_verification}")
+        
+        # Start with base query for professionals
+        query = ServiceProfessional.query
+        
+        # Apply filters
+        if username:
+            query = query.filter(ServiceProfessional.username.ilike(f'%{username}%'))
+        
+        if approval_status is not None:
+            is_approved = approval_status.lower() == 'true'
+            query = query.filter(ServiceProfessional.is_approved == is_approved)
+        
+        if active_status is not None:
+            is_active = active_status.lower() == 'true'
+            query = query.filter(ServiceProfessional.is_active == is_active)
+        
+        professionals = query.all()
+        logger.debug(f"Found {len(professionals)} professionals matching criteria")
+        
+        result = []
+        for pro in professionals:
+            pro_data = pro.to_dict()
+            
+            # If requested, include document verification status
+            if include_verification:
+                # Count documents
+                docs = Document.query.filter_by(professional_id=pro.id).all()
+                pro_data['documents_count'] = len(docs)
+                
+                # Check verification status
+                pro_data['documents_verified'] = all(doc.verified for doc in docs) if docs else False
+                
+                # Add individual document status
+                pro_data['documents_status'] = {
+                    'id_proof': next((True for doc in docs if doc.document_type == 'id_proof' and doc.verified), False),
+                    'address_proof': next((True for doc in docs if doc.document_type == 'address_proof' and doc.verified), False),
+                    'qualification': next((True for doc in docs if doc.document_type == 'qualification' and doc.verified), False)
+                }
+            
+            result.append(pro_data)
+        
+        return jsonify(result), 200
+    
+    except Exception as e:
+        logger.error(f"Error searching professionals: {str(e)}")
+        return jsonify({'error': str(e)}), 422
+
+@routes_bp.route('/admin/search-customers', methods=['GET'])
+@admin_required
+def search_customers():
+    """Search customers with filters"""
+    try:
+        # Get query parameters
+        username = request.args.get('username')
+        active_status = request.args.get('active')
+        
+        logger.debug(f"Admin searching customers with filters: username={username}, active={active_status}")
+        
+        # Start with base query for customers
+        query = Customer.query
+        
+        # Apply filters
+        if username:
+            query = query.filter(Customer.username.ilike(f'%{username}%'))
+        if active_status is not None:
+            is_active = active_status.lower() == 'true'
+            query = query.filter(Customer.is_active == is_active)
+        
+        customers = query.all()
+        logger.debug(f"Found {len(customers)} customers matching criteria")
+        
+        return jsonify([customer.to_dict() for customer in customers]), 200
+    except Exception as e:
+        logger.error(f"Error searching customers: {str(e)}")
+        return jsonify({'error': str(e)}), 422
+
+@routes_bp.route('/admin/users/<int:user_id>/documents', methods=['GET'])
+@admin_required
+def get_user_documents(user_id):
+    """Get all documents for a specific user (professional)"""
+    try:
+        logger.debug(f"Admin requesting documents for user ID: {user_id}")
+        # Check if user exists
+        user = User.query.get(user_id)
+        if not user:
+            logger.warning(f"User ID {user_id} not found when requesting documents")
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if it's a professional
+        if user.role != 'professional':
+            logger.warning(f"User ID {user_id} is not a professional")
+            return jsonify({'error': 'User is not a professional'}), 400
+        
+        # Get documents
+        documents = Document.query.filter_by(professional_id=user_id).all()
+        logger.debug(f"Found {len(documents)} documents for professional ID {user_id}")
+        
+        return jsonify([doc.to_dict() for doc in documents]), 200
+    except Exception as e:
+        logger.error(f"Error getting documents for user {user_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@routes_bp.route('/admin/documents/<int:document_id>/verify', methods=['PUT'])
+@admin_required
+def verify_document(document_id):
+    """Verify a document as valid/authentic"""
+    try:
+        logger.debug(f"Admin verifying document ID: {document_id}")
+        # Check if document exists
+        document = Document.query.get(document_id)
+        if not document:
+            logger.warning(f"Document ID {document_id} not found")
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Get request data
+        data = request.get_json()
+        verified = data.get('verified', True)
+        
+        # Update document verification status
+        document.verified = verified
+        logger.debug(f"Setting document {document_id} verification status to {verified}")
+        
+        # If all documents are verified, update professional's documents_verified flag
+        if verified:
+            professional = ServiceProfessional.query.get(document.professional_id)
+            if professional:
+                # Count documents
+                all_docs = Document.query.filter_by(professional_id=professional.id).all()
+                all_verified = all(doc.verified for doc in all_docs)
+                
+                if all_verified:
+                    logger.info(f"All documents verified for professional ID {professional.id}")
+                    professional.documents_verified = True
+                    db.session.commit()
+        
+        db.session.commit()
+        
+        return jsonify({'message': 'Document verification status updated', 'document': document.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error verifying document {document_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+#=======================================================================
+# ADMIN SERVICES MANAGEMENT
+#=======================================================================
+
 @routes_bp.route('/admin/services', methods=['GET', 'POST'])
-@jwt_required()  # Add JWT requirement
+@jwt_required()
 @admin_required
 def manage_services():
+    """Manage services - list all or create new"""
     try:
-        print(f"DEBUG - Admin services endpoint called: {request.method}")
+        logger.debug(f"Admin services endpoint called: {request.method}")
         
         if request.method == 'GET':
             services = Service.query.all()
-            print(f"DEBUG - Found {len(services)} services")
-            return jsonify({
-                'status': 'success',
-                'data': [{
-                    'id': service.id,
-                    'name': service.name,
-                    'base_price': float(service.base_price),
-                    'description': service.description,
-                    'avg_duration': int(service.avg_duration),
-                    'status': 'active'
-                } for service in services]
-            }), 200
+            logger.debug(f"Found {len(services)} services")
+            # Return services directly without nesting under 'data'
+            return jsonify([{
+                'id': service.id,
+                'name': service.name,
+                'base_price': float(service.base_price),
+                'description': service.description,
+                'avg_duration': int(service.avg_duration),
+                'status': service.status
+            } for service in services]), 200
 
         elif request.method == 'POST':
             data = request.get_json()
-            print(f"DEBUG - Create service request data: {data}")
+            logger.debug(f"Create service request data: {data}")
             
             # Validate required fields
             required_fields = ['name', 'base_price', 'description', 'avg_duration']
             if not all(field in data for field in required_fields):
+                logger.warning("Missing required fields in service creation")
                 return jsonify({
                     'status': 'error',
                     'message': 'Missing required fields'
@@ -145,16 +426,18 @@ def manage_services():
                 if base_price <= 0:
                     raise ValueError
             except ValueError:
+                logger.warning(f"Invalid base price: {data.get('base_price')}")
                 return jsonify({'status': 'error', 'message': 'Invalid base price'}), 400
 
             if not isinstance(data['description'], str):
                 return jsonify({'status': 'error', 'message': 'Invalid description'}), 400
-
+            
             try:
                 avg_duration = int(data['avg_duration'])
                 if avg_duration <= 0:
                     raise ValueError
             except ValueError:
+                logger.warning(f"Invalid avg_duration: {data.get('avg_duration')}")
                 return jsonify({'status': 'error', 'message': 'Invalid average duration'}), 400
 
             new_service = Service(
@@ -162,61 +445,57 @@ def manage_services():
                 base_price=base_price,
                 description=data['description'],
                 avg_duration=avg_duration,
+                status='active',  # Default to active
                 created_at=datetime.utcnow()
             )
             
             db.session.add(new_service)
             db.session.commit()
-            print(f"DEBUG - Service created with ID: {new_service.id}")
-
+            logger.info(f"Service created with ID: {new_service.id}, Name: {new_service.name}")
+            
+            # Return service data directly
             return jsonify({
-                'status': 'success',
-                'message': 'Service created successfully',
-                'data': {
-                    'id': new_service.id,
-                    'name': new_service.name,
-                    'base_price': float(new_service.base_price),
-                    'description': new_service.description,
-                    'avg_duration': int(new_service.avg_duration),
-                    'status': 'active'
-                }
+                'id': new_service.id,
+                'name': new_service.name,
+                'base_price': float(new_service.base_price),
+                'description': new_service.description,
+                'avg_duration': int(new_service.avg_duration),
+                'status': new_service.status
             }), 201
 
     except Exception as e:
-        print(f"DEBUG - Error in admin services endpoint: {str(e)}")
         db.session.rollback()
+        logger.error(f"Error in admin services endpoint: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e)
         }), 500
 
 @routes_bp.route('/admin/services/<int:service_id>', methods=['GET', 'PUT', 'DELETE'])
-@jwt_required()  # Add JWT requirement
+@jwt_required()
 @admin_required
 def service_detail(service_id):
+    """Get, update or delete a specific service"""
     try:
-        print(f"DEBUG - Admin service detail endpoint called: {request.method}, ID: {service_id}")
-        
+        logger.debug(f"Admin service detail endpoint called: {request.method}, ID: {service_id}")
         service = Service.query.get_or_404(service_id)
-        print(f"DEBUG - Found service: {service.name}")
+        logger.debug(f"Found service: {service.name}")
 
         if request.method == 'GET':
+            # Return service data directly
             return jsonify({
-                'status': 'success',
-                'data': {
-                    'id': service.id,
-                    'name': service.name,
-                    'base_price': float(service.base_price),
-                    'description': service.description,
-                    'avg_duration': int(service.avg_duration),
-                    'status': service.status
-                }
+                'id': service.id,
+                'name': service.name,
+                'base_price': float(service.base_price),
+                'description': service.description,
+                'avg_duration': int(service.avg_duration),
+                'status': service.status
             }), 200
 
         elif request.method == 'PUT':
             data = request.get_json()
-            print(f"DEBUG - Update service request data: {data}")
-
+            logger.debug(f"Update service request data: {data}")
+            
             if 'name' in data:
                 service.name = data['name']
             if 'base_price' in data:
@@ -230,23 +509,20 @@ def service_detail(service_id):
 
             service.updated_at = datetime.utcnow()
             db.session.commit()
-            print(f"DEBUG - Service {service_id} updated successfully")
-
+            logger.info(f"Service {service_id} updated successfully")
+            
+            # Return updated service data
             return jsonify({
-                'status': 'success',
-                'message': 'Service updated successfully',
-                'data': {
-                    'id': service.id,
-                    'name': service.name,
-                    'base_price': float(service.base_price),
-                    'description': service.description,
-                    'avg_duration': int(service.avg_duration),
-                    'status': service.status
-                }
+                'id': service.id,
+                'name': service.name,
+                'base_price': float(service.base_price),
+                'description': service.description,
+                'avg_duration': int(service.avg_duration),
+                'status': service.status
             }), 200
 
         elif request.method == 'DELETE':
-            print(f"DEBUG - Attempting to delete service {service_id}")
+            logger.debug(f"Attempting to delete service {service_id}")
             
             # First check if service is associated with any active service requests
             active_requests = ServiceRequest.query.filter_by(
@@ -256,6 +532,7 @@ def service_detail(service_id):
             ).first()
             
             if active_requests:
+                logger.warning(f"Cannot delete service {service_id}: it has active requests")
                 return jsonify({
                     'status': 'error',
                     'message': 'Cannot delete service: it has active service requests'
@@ -264,7 +541,7 @@ def service_detail(service_id):
             # Delete the service
             db.session.delete(service)
             db.session.commit()
-            print(f"DEBUG - Service {service_id} deleted successfully")
+            logger.info(f"Service {service_id} deleted successfully")
             
             return jsonify({
                 'status': 'success',
@@ -272,169 +549,213 @@ def service_detail(service_id):
             }), 200
 
     except Exception as e:
-        print(f"DEBUG - Error in admin service detail endpoint: {str(e)}")
         db.session.rollback()
+        logger.error(f"Error in admin service detail endpoint: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e)
         }), 500
 
-# Professional routes
+#=======================================================================
+# ADMIN ANALYTICS ROUTES
+#=======================================================================
+
+@routes_bp.route('/admin/analytics/revenue', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_revenue_analytics():
+    """Get revenue analytics for admin dashboard"""
+    try:
+        logger.debug("Admin requesting revenue analytics")
+        # Calculate total revenue from completed service requests
+        total_revenue = db.session.query(
+            func.sum(Service.base_price)
+        ).join(ServiceRequest).filter(
+            ServiceRequest.status == 'completed'
+        ).scalar() or 0.0
+        
+        # Calculate revenue growth (comparing current month to previous month)
+        current_month = datetime.now().replace(day=1)
+        last_month = current_month - timedelta(days=1)
+        last_month = last_month.replace(day=1)  # First day of previous month
+        
+        current_month_revenue = db.session.query(
+            func.sum(Service.base_price)
+        ).join(ServiceRequest).filter(
+            ServiceRequest.status == 'completed',
+            ServiceRequest.completion_date >= current_month
+        ).scalar() or 0.0
+        
+        last_month_revenue = db.session.query(
+            func.sum(Service.base_price)
+        ).join(ServiceRequest).filter(
+            ServiceRequest.status == 'completed',
+            ServiceRequest.completion_date >= last_month,
+            ServiceRequest.completion_date < current_month
+        ).scalar() or 0.0
+        
+        revenue_growth = 0
+        if last_month_revenue > 0:
+            revenue_growth = ((current_month_revenue - last_month_revenue) / last_month_revenue) * 100
+        
+        logger.debug(f"Revenue analytics: total={total_revenue}, current month={current_month_revenue}, previous month={last_month_revenue}, growth={revenue_growth}%")
+        return jsonify({
+            'total_revenue': total_revenue,
+            'current_month_revenue': current_month_revenue,
+            'last_month_revenue': last_month_revenue,
+            'revenue_growth': revenue_growth
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting revenue analytics: {str(e)}")
+        return jsonify({'error': str(e)}), 422
+
+@routes_bp.route('/admin/services/stats', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_services_stats():
+    """Get service statistics for admin dashboard"""
+    try:
+        logger.debug("Admin requesting services statistics")
+        total_active_services = Service.query.filter_by(status='active').count()
+        
+        # Calculate service growth
+        current_month = datetime.now().replace(day=1)
+        last_month = current_month - timedelta(days=1)
+        last_month = last_month.replace(day=1)  # First day of previous month
+        
+        new_services = Service.query.filter(
+            Service.created_at >= current_month
+        ).count()
+        
+        old_services = Service.query.filter(
+            Service.created_at >= last_month,
+            Service.created_at < current_month
+        ).count()
+        
+        service_growth = 0
+        if old_services > 0:
+            service_growth = ((new_services - old_services) / old_services) * 100
+
+        logger.debug(f"Service stats: active={total_active_services}, new this month={new_services}, previous month={old_services}, growth={service_growth}%")
+        return jsonify({
+            'total_active_services': total_active_services,
+            'new_services_this_month': new_services,
+            'services_last_month': old_services,
+            'service_growth': service_growth
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting service statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 422
+
+@routes_bp.route('/admin/users/stats', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_users_stats():
+    """Get user statistics for admin dashboard"""
+    try:
+        logger.debug("Admin requesting user statistics")
+        # Count professionals (excluding admins)
+        total_professionals = User.query.filter_by(role='professional').count()
+        
+        # Count customers (excluding admins)
+        total_customers = User.query.filter_by(role='customer').count()
+        
+        # Calculate user growth by role (comparing current month to previous month)
+        current_month = datetime.now().replace(day=1)
+        last_month = current_month - timedelta(days=1)
+        last_month = last_month.replace(day=1)  # First day of previous month
+        
+        # Professional growth
+        new_professionals = User.query.filter(
+            User.created_at >= current_month,
+            User.role == 'professional'
+        ).count()
+        
+        old_professionals = User.query.filter(
+            User.created_at >= last_month,
+            User.created_at < current_month,
+            User.role == 'professional'
+        ).count()
+        
+        professional_growth = 0
+        if old_professionals > 0:
+            professional_growth = ((new_professionals - old_professionals) / old_professionals) * 100
+
+        # Customer growth
+        new_customers = User.query.filter(
+            User.created_at >= current_month,
+            User.role == 'customer'
+        ).count()
+        
+        old_customers = User.query.filter(
+            User.created_at >= last_month,
+            User.created_at < current_month,
+            User.role == 'customer'
+        ).count()
+        
+        customer_growth = 0
+        if old_customers > 0:
+            customer_growth = ((new_customers - old_customers) / old_customers) * 100
+
+        logger.debug(f"User stats: professionals={total_professionals} (growth={professional_growth}%), customers={total_customers} (growth={customer_growth}%)")
+        return jsonify({
+            'total_professionals': total_professionals,
+            'professional_growth': professional_growth,
+            'total_customers': total_customers,
+            'customer_growth': customer_growth
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting user statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 422
+
+#=======================================================================
+# PROFESSIONAL ROUTES
+#=======================================================================
+
 @routes_bp.route('/professional/profile', methods=['GET', 'PUT'])
 @professional_required
 def manage_profile():
+    """Get or update professional's profile"""
     current_user_id = get_jwt_identity()
     user = User.query.get(current_user_id)
     
     if request.method == 'GET':
+        logger.debug(f"Professional {current_user_id} requesting profile")
         return jsonify(user.to_dict()), 200
-        
+    
     if request.method == 'PUT':
         data = request.get_json()
+        logger.debug(f"Professional {current_user_id} updating profile with data: {data}")
         
         if 'email' in data:
             user.email = data['email']
             
         # Update other fields as needed
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
+        if 'description' in data:
+            professional = ServiceProfessional.query.get(current_user_id)
+            if professional:
+                professional.description = data['description']
         
         db.session.commit()
+        logger.info(f"Professional {current_user_id} profile updated")
         return jsonify({'message': 'Profile updated', 'user': user.to_dict()}), 200
 
-# Customer routes
-@routes_bp.route('/customer/profile', methods=['GET', 'PUT'])
-@customer_required
-def customer_profile():
-    current_user_id = get_jwt_identity()
-    user = User.query.get(current_user_id)
-    
-    if request.method == 'GET':
-        return jsonify(user.to_dict()), 200
-        
-    if request.method == 'PUT':
-        data = request.get_json()
-        
-        if 'email' in data:
-            user.email = data['email']
-            
-        # Update other fields as needed
-        
-        db.session.commit()
-        return jsonify({'message': 'Profile updated', 'user': user.to_dict()}), 200
-
-# Service Request Routes for Customers
-@routes_bp.route('/customer/service-requests', methods=['GET', 'POST'])
-@customer_required
-def customer_service_requests():
-    current_user_id = get_jwt_identity()
-    
-    # GET - List all service requests for the customer
-    if request.method == 'GET':
-        requests = ServiceRequest.query.filter_by(customer_id=current_user_id).all()
-        return jsonify([{
-            'id': req.id,
-            'service_id': req.service_id,
-            'service_name': req.service.name if req.service else 'Unknown',
-            'pro_id': req.pro_id,
-            'professional_name': req.professional.username if req.professional else None,
-            'status': req.status,
-            'request_date': req.request_date.isoformat(),
-            'completion_date': req.completion_date.isoformat() if req.completion_date else None
-        } for req in requests]), 200
-    
-    # POST - Create a new service request
-    if request.method == 'POST':
-        data = request.get_json()
-        service_id = data.get('service_id')
-        
-        # Check if service exists and is active
-        service = Service.query.get(service_id)
-        if not service:
-            return jsonify({'error': 'Service not found'}), 404
-        
-        # Check if service is active
-        if service.status != 'active':
-            return jsonify({
-                'error': 'This service is currently unavailable for new bookings'
-            }), 400
-            
-        new_request = ServiceRequest(
-            service_id=service_id,
-            customer_id=current_user_id,
-            status='requested',
-            notes=data.get('notes', '')
-        )
-        
-        db.session.add(new_request)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Service request created successfully',
-            'request_id': new_request.id
-        }), 201
-
-@routes_bp.route('/customer/service-requests/<int:request_id>', methods=['GET', 'PUT'])
-@customer_required
-def customer_service_request_detail(request_id):
-    current_user_id = get_jwt_identity()
-    
-    # Check if the request exists and belongs to the customer
-    service_request = ServiceRequest.query.filter_by(
-        id=request_id, 
-        customer_id=current_user_id
-    ).first()
-    
-    if not service_request:
-        return jsonify({'error': 'Service request not found'}), 404
-    
-    # GET - Get service request details
-    if request.method == 'GET':
-        return jsonify({
-            'id': service_request.id,
-            'service_id': service_request.service_id,
-            'service_name': service_request.service.name if service_request.service else 'Unknown',
-            'pro_id': service_request.pro_id,
-            'professional_name': service_request.professional.username if service_request.professional else None,
-            'status': service_request.status,
-            'request_date': service_request.request_date.isoformat(),
-            'completion_date': service_request.completion_date.isoformat() if service_request.completion_date else None,
-            'notes': service_request.notes
-        }), 200
-    
-    # PUT - Update (cancel or modify) service request
-    if request.method == 'PUT':
-        data = request.get_json()
-        
-        # Only allow updates if the status is 'requested'
-        if service_request.status not in ['requested', 'assigned']:
-            return jsonify({
-                'error': 'Cannot modify a service request that is already in progress or completed'
-            }), 400
-        
-        # Handle cancellation
-        if data.get('status') == 'cancelled':
-            service_request.status = 'cancelled'
-        
-        # Update service if provided and status is still 'requested'
-        if data.get('service_id') and service_request.status == 'requested':
-            service_request.service_id = data.get('service_id')
-            
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Service request updated successfully'
-        }), 200
-
-# Service Request Routes for Professionals
 @routes_bp.route('/professional/service-requests', methods=['GET'])
 @professional_required
 def professional_service_requests():
+    """Get service requests available to or assigned to this professional"""
     current_user_id = get_jwt_identity()
+    logger.debug(f"Professional {current_user_id} requesting service requests")
     
     # Get all open requests (requested) and requests assigned to this professional
     available_requests = ServiceRequest.query.filter_by(status='requested').all()
     assigned_requests = ServiceRequest.query.filter_by(
         pro_id=current_user_id
     ).all()
+    
+    logger.debug(f"Found {len(available_requests)} available requests and {len(assigned_requests)} assigned requests")
     
     # Combine and deduplicate
     all_requests = {}
@@ -457,16 +778,19 @@ def professional_service_requests():
 @routes_bp.route('/professional/service-requests/<int:request_id>', methods=['GET', 'PUT'])
 @professional_required
 def professional_service_request_detail(request_id):
+    """Get or update a specific service request for a professional"""
     current_user_id = get_jwt_identity()
+    logger.debug(f"Professional {current_user_id} accessing request {request_id}")
     
     # Find the service request
     service_request = ServiceRequest.query.get(request_id)
-    
     if not service_request:
+        logger.warning(f"Service request {request_id} not found")
         return jsonify({'error': 'Service request not found'}), 404
     
     # GET - Get service request details
     if request.method == 'GET':
+        logger.debug(f"Professional {current_user_id} getting details for request {request_id}")
         return jsonify({
             'id': service_request.id,
             'service_id': service_request.service_id,
@@ -483,363 +807,37 @@ def professional_service_request_detail(request_id):
     # PUT - Update status (accept, reject, complete)
     if request.method == 'PUT':
         data = request.get_json()
+        logger.debug(f"Professional {current_user_id} performing action '{data.get('action')}' on request {request_id}")
+        
         action = data.get('action')
         
         # Handle different actions
         if action == 'accept' and service_request.status == 'requested':
             service_request.status = 'assigned'
             service_request.pro_id = current_user_id
+            logger.info(f"Professional {current_user_id} accepted request {request_id}")
         elif action == 'reject' and service_request.pro_id == current_user_id:
             service_request.status = 'requested'
             service_request.pro_id = None
+            logger.info(f"Professional {current_user_id} rejected request {request_id}")
         elif action == 'complete' and service_request.pro_id == current_user_id and service_request.status == 'assigned':
             service_request.status = 'completed'
             service_request.completion_date = datetime.utcnow()
+            logger.info(f"Professional {current_user_id} completed request {request_id}")
         else:
+            logger.warning(f"Invalid action '{action}' for request {request_id} in status {service_request.status}")
             return jsonify({'error': 'Invalid action for the current status'}), 400
-            
+        
         db.session.commit()
-        
-        return jsonify({
-            'message': f'Service request {action}ed successfully'
-        }), 200
+        return jsonify({'message': f'Service request {action}ed successfully'}), 200
 
-# Public routes - no authentication required
-@routes_bp.route('/services', methods=['GET'])
-def get_services():
-    # Get query parameters for search/filter
-    name = request.args.get('name')
-    min_price = request.args.get('min_price', type=float)
-    max_price = request.args.get('max_price', type=float)
-    
-    # By default, only show active services for public endpoints
-    # Admin users can override this with include_inactive parameter
-    include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
-    
-    # Start with base query
-    query = Service.query
-    
-    # Apply filters based on parameters
-    if name:
-        query = query.filter(Service.name.ilike(f'%{name}%'))
-    if min_price is not None:
-        query = query.filter(Service.base_price >= min_price)
-    if max_price is not None:
-        query = query.filter(Service.base_price <= max_price)
-    
-    # Filter inactive services unless explicitly requested
-    if not include_inactive:
-        query = query.filter(Service.status == 'active')
-    
-    services = query.all()
-    
-    return jsonify([{
-        'id': service.id,
-        'name': service.name,
-        'base_price': service.base_price,
-        'description': service.description,
-        'avg_duration': service.avg_duration,
-        'status': service.status
-    } for service in services]), 200
-
-@routes_bp.route('/services/search', methods=['GET'])
-def search_services():
-    # Get query parameters for search/filter
-    name = request.args.get('name')
-    pin_code = request.args.get('pin_code')
-    
-    # Start with base query for services
-    query = Service.query
-    
-    # Apply filters based on parameters
-    if name:
-        query = query.filter(Service.name.ilike(f'%{name}%'))
-    
-    services = query.all()
-    
-    # If pin code is provided, find professionals in that area
-    if pin_code:
-        result = []
-        for service in services:
-            # Find professionals for this service type in the area
-            professionals = ServiceProfessional.query.filter(
-                ServiceProfessional.service_type_id == service.id,
-                ServiceProfessional.is_approved == True,
-                ServiceProfessional.is_active == True
-            ).join(Customer, Customer.id == ServiceProfessional.id).filter(
-                Customer.pin_code == pin_code
-            ).all()
-            
-            if professionals:
-                service_data = {
-                    'id': service.id,
-                    'name': service.name,
-                    'base_price': service.base_price,
-                    'description': service.description,
-                    'avg_duration': service.avg_duration,
-                    'available_professionals': len(professionals)
-                }
-                result.append(service_data)
-        return jsonify(result), 200
-    
-    # If no pin code, return all services
-    return jsonify([{
-        'id': service.id,
-        'name': service.name,
-        'base_price': service.base_price,
-        'description': service.description,
-        'avg_duration': service.avg_duration
-    } for service in services]), 200
-
-# Get professional profile with reviews
-@routes_bp.route('/professionals/<int:professional_id>', methods=['GET'])
-def get_professional_profile(professional_id):
-    professional = ServiceProfessional.query.get(professional_id)
-    
-    if not professional:
-        return jsonify({'error': 'Professional not found'}), 404
-        
-    if not professional.is_approved or not professional.is_active:
-        return jsonify({'error': 'This professional is not currently available'}), 404
-    
-    # Get reviews for this professional
-    completed_requests = ServiceRequest.query.filter_by(
-        pro_id=professional_id,
-        status='completed'
-    ).all()
-    
-    reviews_list = []
-    for request in completed_requests:
-        review = Review.query.filter_by(request_id=request.id).first()
-        if review:
-            reviews_list.append({
-                'rating': review.rating,
-                'comment': review.comment,
-                'created_at': review.created_at.isoformat(),
-                'service_name': request.service.name if request.service else 'Unknown Service'
-            })
-    
-    # Create response with professional data and reviews
-    result = professional.to_dict()
-    result['reviews'] = reviews_list
-    
-    return jsonify(result), 200
-
-# Add search functionality for professionals
-@routes_bp.route('/admin/search-professionals', methods=['GET'])
-@admin_required
-def search_professionals():
-    try:
-        # Get query parameters
-        username = request.args.get('username')
-        approval_status = request.args.get('approved')
-        active_status = request.args.get('active')
-        
-        # Start with base query for professionals
-        query = ServiceProfessional.query
-        
-        # Apply filters
-        if username:
-            query = query.filter(ServiceProfessional.username.ilike(f'%{username}%'))
-        if approval_status is not None:
-            is_approved = approval_status.lower() == 'true'
-            query = query.filter(ServiceProfessional.is_approved == is_approved)
-        if active_status is not None:
-            is_active = active_status.lower() == 'true'
-            query = query.filter(ServiceProfessional.is_active == is_active)
-        
-        professionals = query.all()
-        
-        return jsonify([pro.to_dict() for pro in professionals]), 200
-    except Exception as e:
-        return jsonify({'msg': str(e)}), 422
-
-# Add search functionality for customers
-@routes_bp.route('/admin/search-customers', methods=['GET'])
-@admin_required
-def search_customers():
-    try:
-        # Get query parameters
-        username = request.args.get('username')
-        active_status = request.args.get('active')
-        
-        # Start with base query for customers
-        query = Customer.query
-        
-        # Apply filters
-        if username:
-            query = query.filter(Customer.username.ilike(f'%{username}%'))
-        if active_status is not None:
-            is_active = active_status.lower() == 'true'
-            query = query.filter(Customer.is_active == is_active)
-        
-        customers = query.all()
-        
-        return jsonify([customer.to_dict() for customer in customers]), 200
-    except Exception as e:
-        return jsonify({'msg': str(e)}), 422
-
-# Service History and Reviews for Customers
-@routes_bp.route('/customer/service-history', methods=['GET'])
-@customer_required
-def customer_service_history():
-    current_user_id = get_jwt_identity()
-    
-    # Get all service requests for this customer with their review status
-    requests = db.session.query(ServiceRequest, Review).\
-        outerjoin(Review, Review.request_id == ServiceRequest.id).\
-        filter(ServiceRequest.customer_id == current_user_id).all() 
-    
-    result = []
-    for req, review in requests:
-        request_data = {
-            'id': req.id,
-            'service_id': req.service_id,
-            'service_name': req.service.name if req.service else 'Unknown',
-            'pro_id': req.pro_id,
-            'professional_name': req.professional.username if req.professional else None,
-            'status': req.status,
-            'request_date': req.request_date.isoformat(),
-            'completion_date': req.completion_date.isoformat() if req.completion_date else None,
-            'has_review': review is not None
-        }
-        result.append(request_data)
-    
-    return jsonify(result), 200
-
-@routes_bp.route('/customer/service-requests/<int:request_id>/review', methods=['GET', 'POST'])
-@customer_required
-def customer_request_review(request_id):
-    current_user_id = get_jwt_identity()
-        
-    # Check if the request exists and belongs to the customer
-    service_request = ServiceRequest.query.filter_by(
-        id=request_id, 
-        customer_id=current_user_id
-    ).first()
-        
-    if not service_request:
-        return jsonify({'error': 'Service request not found'}), 404
-        
-    if service_request.status != 'completed':
-        return jsonify({'error': 'Cannot review a service that is not completed'}), 400
-        
-    # GET - Fetch review for this request
-    if request.method == 'GET':
-        review = Review.query.filter_by(request_id=request_id).first()
-                
-        if not review:
-            return jsonify({'error': 'No review found for this request'}), 404
-                    
-        return jsonify({
-            'id': review.id,
-            'request_id': review.request_id,
-            'rating': review.rating,
-            'comment': review.comment,
-            'created_at': review.created_at.isoformat() if review.created_at else None
-        }), 200
-        
-    # POST - Create a new review
-    if request.method == 'POST':
-        # Check if a review already exists
-        existing_review = Review.query.filter_by(request_id=request_id).first()
-        if existing_review:
-            return jsonify({'error': 'A review already exists for this request'}), 400
-                
-        data = request.get_json()
-        rating = data.get('rating')
-                
-        if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
-            return jsonify({'error': 'Rating must be a number between 1 and 5'}), 400
-                
-        new_review = Review(
-            request_id=request_id,
-            rating=rating,
-            comment=data.get('comment', '')
-        )
-                
-        db.session.add(new_review)
-        db.session.commit()
-                                
-        return jsonify({'message': 'Review submitted successfully'}), 201
-
-# Update service completion with review system
-@routes_bp.route('/customer/service-requests/<int:request_id>/complete', methods=['PUT'])
-@customer_required
-def complete_service_request(request_id):
-    current_user_id = get_jwt_identity()
-    service_request = ServiceRequest.query.filter_by(
-        id=request_id,
-        customer_id=current_user_id,
-        status='assigned'
-    ).first()
-    
-    if not service_request:
-        return jsonify({'error': 'Service request not found or cannot be completed'}), 404
-    
-    # Mark request as completed
-    service_request.status = 'completed'
-    service_request.completion_date = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify({'message': 'Service request marked as completed'}), 200
-
-# Update the review submission to update professional's average rating
-@routes_bp.route('/customer/service-requests/<int:request_id>/review', methods=['POST'])
-@customer_required
-def submit_review(request_id):
-    current_user_id = get_jwt_identity()
-    
-    # Check if the request exists and belongs to the customer
-    service_request = ServiceRequest.query.filter_by(
-        id=request_id, 
-        customer_id=current_user_id,
-        status='completed'
-    ).first()
-    
-    if not service_request:
-        return jsonify({'error': 'Service request not found or not completed'}), 404
-    
-    # Check if a review already exists
-    existing_review = Review.query.filter_by(request_id=request_id).first()
-    if existing_review:
-        return jsonify({'error': 'A review already exists for this request'}), 400
-    
-    data = request.get_json()
-    rating = data.get('rating')
-    
-    if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
-        return jsonify({'error': 'Rating must be a number between 1 and 5'}), 400
-    
-    # Create the review
-    new_review = Review(
-        request_id=request_id,
-        rating=rating,
-        comment=data.get('comment', '')
-    )
-    
-    db.session.add(new_review)
-    
-    # Update professional's average rating
-    professional = ServiceProfessional.query.get(service_request.pro_id)
-    if professional:
-        # Calculate new average
-        new_total_reviews = professional.total_reviews + 1
-        new_avg = ((professional.average_rating * professional.total_reviews) + rating) / new_total_reviews
-        
-        professional.average_rating = new_avg
-        professional.total_reviews = new_total_reviews
-    
-    db.session.commit()
-    
-    return jsonify({'message': 'Review submitted successfully'}), 201
-
-# Professional statistics
 @routes_bp.route('/professional/stats', methods=['GET'])
 @professional_required
 def professional_stats():
+    """Get statistics for a professional's dashboard"""
     current_user_id = get_jwt_identity()
-        
+    logger.debug(f"Professional {current_user_id} requesting statistics")
+    
     # Count completed requests
     completed_count = ServiceRequest.query.filter_by(
         pro_id=current_user_id, 
@@ -869,6 +867,7 @@ def professional_stats():
         if req.service:
             total_earnings += req.service.base_price
     
+    logger.debug(f"Professional {current_user_id} stats: completed={completed_count}, active={active_count}, rating={avg_rating}, earnings=${total_earnings:.2f}")
     return jsonify({
         'completed': completed_count,
         'active': active_count,
@@ -876,12 +875,322 @@ def professional_stats():
         'totalEarnings': f'${total_earnings:.2f}'
     }), 200
 
-# Customer statistics
+@routes_bp.route('/professional/status/<int:user_id>', methods=['GET'])
+def check_professional_status(user_id):
+    """Check the approval status of a professional"""
+    try:
+        logger.debug(f"Checking status of professional {user_id}")
+        professional = ServiceProfessional.query.get(user_id)
+        
+        if not professional:
+            logger.warning(f"Professional ID {user_id} not found")
+            return jsonify({'error': 'Professional not found'}), 404
+        
+        logger.debug(f"Professional {user_id} status: approved={professional.is_approved}")
+        return jsonify({
+            'id': professional.id,
+            'username': professional.username,
+            'is_approved': professional.is_approved,
+            'rejection_reason': professional.rejection_reason if hasattr(professional, 'rejection_reason') else None
+        }), 200
+    except Exception as e:
+        logger.error(f"Error checking professional status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+#=======================================================================
+# CUSTOMER ROUTES
+#=======================================================================
+
+@routes_bp.route('/customer/profile', methods=['GET', 'PUT'])
+@customer_required
+def customer_profile():
+    """Get or update a customer's profile"""
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    if request.method == 'GET':
+        logger.debug(f"Customer {current_user_id} requesting profile")
+        return jsonify(user.to_dict()), 200
+    
+    if request.method == 'PUT':
+        data = request.get_json()
+        logger.debug(f"Customer {current_user_id} updating profile with data: {data}")
+        
+        if 'email' in data:
+            user.email = data['email']
+            
+        # Update other fields as needed
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
+        if 'address' in data:
+            customer = Customer.query.get(current_user_id)
+            if customer:
+                customer.address = data['address']
+        if 'pin_code' in data:
+            customer = Customer.query.get(current_user_id)
+            if customer:
+                customer.pin_code = data['pin_code']
+        
+        db.session.commit()
+        logger.info(f"Customer {current_user_id} profile updated")
+        return jsonify({'message': 'Profile updated', 'user': user.to_dict()}), 200
+
+@routes_bp.route('/customer/service-requests', methods=['GET', 'POST'])
+@customer_required
+def customer_service_requests():
+    """Get or create service requests for a customer"""
+    current_user_id = get_jwt_identity()
+    
+    # GET - List all service requests for the customer
+    if request.method == 'GET':
+        logger.debug(f"Customer {current_user_id} requesting service requests")
+        requests = ServiceRequest.query.filter_by(customer_id=current_user_id).all()
+        logger.debug(f"Found {len(requests)} requests for customer {current_user_id}")
+        return jsonify([{
+            'id': req.id,
+            'service_id': req.service_id,
+            'service_name': req.service.name if req.service else 'Unknown',
+            'pro_id': req.pro_id,
+            'professional_name': req.professional.username if req.professional else None,
+            'status': req.status,
+            'request_date': req.request_date.isoformat(),
+            'completion_date': req.completion_date.isoformat() if req.completion_date else None
+        } for req in requests]), 200
+    
+    # POST - Create a new service request
+    if request.method == 'POST':
+        data = request.get_json()
+        service_id = data.get('service_id')
+        logger.debug(f"Customer {current_user_id} creating service request for service {service_id}")
+        
+        # Check if service exists and is active
+        service = Service.query.get(service_id)
+        if not service:
+            logger.warning(f"Service {service_id} not found")
+            return jsonify({'error': 'Service not found'}), 404
+        
+        if service.status != 'active':
+            logger.warning(f"Service {service_id} is not active")
+            return jsonify({
+                'error': 'This service is currently unavailable for new bookings'
+            }), 400
+            
+        new_request = ServiceRequest(
+            service_id=service_id,
+            customer_id=current_user_id,
+            status='requested',
+            notes=data.get('notes', ''),
+            request_date=datetime.utcnow()
+        )
+        
+        db.session.add(new_request)
+        db.session.commit()
+        logger.info(f"Customer {current_user_id} created service request {new_request.id} for service {service_id}")
+        
+        return jsonify({
+            'message': 'Service request created successfully',
+            'request_id': new_request.id
+        }), 201
+
+@routes_bp.route('/customer/service-requests/<int:request_id>', methods=['GET', 'PUT'])
+@customer_required
+def customer_service_request_detail(request_id):
+    """Get or update a specific service request for a customer"""
+    current_user_id = get_jwt_identity()
+    logger.debug(f"Customer {current_user_id} accessing request {request_id}")
+    
+    # Check if the request exists and belongs to the customer
+    service_request = ServiceRequest.query.filter_by(
+        id=request_id, 
+        customer_id=current_user_id
+    ).first()
+    
+    if not service_request:
+        logger.warning(f"Service request {request_id} not found for customer {current_user_id}")
+        return jsonify({'error': 'Service request not found'}), 404
+    
+    # GET - Get service request details
+    if request.method == 'GET':
+        logger.debug(f"Customer {current_user_id} getting details for request {request_id}")
+        return jsonify({
+            'id': service_request.id,
+            'service_id': service_request.service_id,
+            'service_name': service_request.service.name if service_request.service else 'Unknown',
+            'pro_id': service_request.pro_id,
+            'professional_name': service_request.professional.username if service_request.professional else None,
+            'status': service_request.status,
+            'request_date': service_request.request_date.isoformat(),
+            'completion_date': service_request.completion_date.isoformat() if service_request.completion_date else None,
+            'notes': service_request.notes
+        }), 200
+    
+    # PUT - Update (cancel or modify) service request
+    if request.method == 'PUT':
+        data = request.get_json()
+        logger.debug(f"Customer {current_user_id} updating request {request_id} with data: {data}")
+        
+        # Only allow updates if the status is 'requested' or 'assigned'
+        if service_request.status not in ['requested', 'assigned']:
+            logger.warning(f"Cannot modify request {request_id} in status {service_request.status}")
+            return jsonify({
+                'error': 'Cannot modify a service request that is already in progress or completed'
+            }), 400
+        
+        # Handle cancellation
+        if data.get('status') == 'cancelled':
+            service_request.status = 'cancelled'
+            logger.info(f"Customer {current_user_id} cancelled request {request_id}")
+        
+        # Update service if provided and status is still 'requested'
+        if data.get('service_id') and service_request.status == 'requested':
+            service_request.service_id = data.get('service_id')
+            logger.info(f"Customer {current_user_id} changed service for request {request_id} to {data.get('service_id')}")
+            
+        db.session.commit()
+        return jsonify({'message': 'Service request updated successfully'}), 200
+
+@routes_bp.route('/customer/service-history', methods=['GET'])
+@customer_required
+def customer_service_history():
+    """Get service history for a customer including review status"""
+    current_user_id = get_jwt_identity()
+    logger.debug(f"Customer {current_user_id} requesting service history")
+    
+    # Get all service requests for this customer with their review status
+    requests = db.session.query(ServiceRequest, Review).\
+        outerjoin(Review, Review.request_id == ServiceRequest.id).\
+        filter(ServiceRequest.customer_id == current_user_id).all()
+    
+    logger.debug(f"Found {len(requests)} service requests in history for customer {current_user_id}")
+    
+    result = []
+    for req, review in requests:
+        request_data = {
+            'id': req.id,
+            'service_id': req.service_id,
+            'service_name': req.service.name if req.service else 'Unknown',
+            'pro_id': req.pro_id,
+            'professional_name': req.professional.username if req.professional else None,
+            'status': req.status,
+            'request_date': req.request_date.isoformat(),
+            'completion_date': req.completion_date.isoformat() if req.completion_date else None,
+            'has_review': review is not None
+        }
+        result.append(request_data)
+    
+    return jsonify(result), 200
+
+@routes_bp.route('/customer/service-requests/<int:request_id>/review', methods=['GET', 'POST'])
+@customer_required
+def customer_request_review(request_id):
+    """Get or submit a review for a completed service request"""
+    current_user_id = get_jwt_identity()
+    
+    # Check if the request exists and belongs to the customer
+    service_request = ServiceRequest.query.filter_by(
+        id=request_id, 
+        customer_id=current_user_id
+    ).first()
+    
+    if not service_request:
+        logger.warning(f"Service request {request_id} not found for customer {current_user_id}")
+        return jsonify({'error': 'Service request not found'}), 404
+    
+    if service_request.status != 'completed':
+        logger.warning(f"Cannot review request {request_id} with status {service_request.status}")
+        return jsonify({'error': 'Cannot review a service that is not completed'}), 400
+    
+    # GET - Fetch review for this request
+    if request.method == 'GET':
+        logger.debug(f"Customer {current_user_id} getting review for request {request_id}")
+        review = Review.query.filter_by(request_id=request_id).first()
+                
+        if not review:
+            logger.debug(f"No review found for request {request_id}")
+            return jsonify({'error': 'No review found for this request'}), 404
+        
+        logger.debug(f"Found review for request {request_id}: rating={review.rating}")
+        return jsonify({
+            'id': review.id,
+            'request_id': review.request_id,
+            'rating': review.rating,
+            'comment': review.comment,
+            'created_at': review.created_at.isoformat() if review.created_at else None
+        }), 200
+    
+    # POST - Create a new review
+    if request.method == 'POST':
+        # Check if a review already exists
+        existing_review = Review.query.filter_by(request_id=request_id).first()
+        if existing_review:
+            logger.warning(f"Review already exists for request {request_id}")
+            return jsonify({'error': 'A review already exists for this request'}), 400
+                
+        data = request.get_json()
+        rating = data.get('rating')
+        logger.debug(f"Customer {current_user_id} submitting review for request {request_id} with rating {rating}")
+                
+        if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+            logger.warning(f"Invalid rating {rating} for review")
+            return jsonify({'error': 'Rating must be a number between 1 and 5'}), 400
+                
+        new_review = Review(
+            request_id=request_id,
+            rating=rating,
+            comment=data.get('comment', ''),
+            created_at=datetime.utcnow()
+        )
+                
+        db.session.add(new_review)
+        db.session.commit()
+                
+        # Update professional's average rating
+        professional = ServiceProfessional.query.get(service_request.pro_id)
+        if professional:
+            # Calculate new average
+            new_total_reviews = professional.total_reviews + 1
+            new_avg = ((professional.average_rating * professional.total_reviews) + rating) / new_total_reviews
+            professional.average_rating = new_avg
+            professional.total_reviews = new_total_reviews
+            logger.debug(f"Updated professional {professional.id} rating to {new_avg} ({new_total_reviews} reviews)")
+        
+        db.session.commit()
+        logger.info(f"Customer {current_user_id} submitted review for request {request_id}")
+                                
+        return jsonify({'message': 'Review submitted successfully'}), 201
+
+@routes_bp.route('/customer/service-requests/<int:request_id>/complete', methods=['PUT'])
+@customer_required
+def complete_service_request(request_id):
+    """Mark a service request as completed by the customer"""
+    current_user_id = get_jwt_identity()
+    logger.debug(f"Customer {current_user_id} marking request {request_id} as completed")
+    
+    service_request = ServiceRequest.query.filter_by(
+        id=request_id,
+        customer_id=current_user_id,
+        status='assigned'
+    ).first()
+    
+    if not service_request:
+        logger.warning(f"Service request {request_id} not found or cannot be completed")
+        return jsonify({'error': 'Service request not found or cannot be completed'}), 404
+    
+    # Mark request as completed
+    service_request.status = 'completed'
+    service_request.completion_date = datetime.utcnow()
+    db.session.commit()
+    logger.info(f"Customer {current_user_id} marked request {request_id} as completed")
+    
+    return jsonify({'message': 'Service request marked as completed'}), 200
+
 @routes_bp.route('/customer/service-stats', methods=['GET'])
 @customer_required
 def customer_service_stats():
+    """Get service statistics for a customer's dashboard"""
     current_user_id = get_jwt_identity()
-        
+    logger.debug(f"Customer {current_user_id} requesting service statistics")
+    
     # Get counts of different request statuses
     total_requests = ServiceRequest.query.filter_by(customer_id=current_user_id).count()
     completed_requests = ServiceRequest.query.filter_by(customer_id=current_user_id, status='completed').count()
@@ -900,6 +1209,7 @@ def customer_service_stats():
         if req.service:
             total_spent += req.service.base_price
     
+    logger.debug(f"Customer {current_user_id} stats: total={total_requests}, completed={completed_requests}, pending={pending_requests}, spent=${total_spent}")
     return jsonify({
         'totalRequests': total_requests,
         'completedRequests': completed_requests,
@@ -907,133 +1217,222 @@ def customer_service_stats():
         'totalSpent': total_spent
     }), 200
 
-# Admin analytics
-@routes_bp.route('/admin/analytics/revenue', methods=['GET'])
-@jwt_required()
-@admin_required
-def get_revenue_analytics():
+#=======================================================================
+# PUBLIC ROUTES (No authentication required)
+#=======================================================================
+
+@routes_bp.route('/services', methods=['GET'])
+def get_services():
+    """Get all available services with optional filters"""
+    # Get query parameters for search/filter
+    name = request.args.get('name')
+    min_price = request.args.get('min_price', type=float)
+    max_price = request.args.get('max_price', type=float)
+    
+    logger.debug(f"Public service search: name={name}, min_price={min_price}, max_price={max_price}")
+    
+    # By default, only show active services for public endpoints
+    # Admin users can override this with include_inactive parameter
+    include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
+    
+    # Start with base query for services
+    query = Service.query
+    
+    # Apply filters based on parameters
+    if name:
+        query = query.filter(Service.name.ilike(f'%{name}%'))
+    if min_price is not None:
+        query = query.filter(Service.base_price >= min_price)
+    if max_price is not None:
+        query = query.filter(Service.base_price <= max_price)
+    
+    # Filter inactive services unless explicitly requested
+    if not include_inactive:
+        query = query.filter(Service.status == 'active')
+    
+    services = query.all()
+    logger.debug(f"Found {len(services)} services matching criteria")
+    
+    return jsonify([{
+        'id': service.id,
+        'name': service.name,
+        'base_price': service.base_price,
+        'description': service.description,
+        'avg_duration': service.avg_duration,
+        'status': service.status
+    } for service in services]), 200
+
+@routes_bp.route('/services/available', methods=['GET'])
+def get_available_services():
+    """Get all active services that professionals can register for"""
     try:
-        # Calculate total revenue from completed service requests
-        total_revenue = db.session.query(
-            func.sum(Service.base_price)
-        ).join(ServiceRequest).filter(
-            ServiceRequest.status == 'completed'
-        ).scalar() or 0.0
-
-        # Calculate revenue growth (comparing current month to previous month)
-        current_month = datetime.now().replace(day=1)
-        last_month = current_month - timedelta(days=1)
-        
-        current_month_revenue = db.session.query(
-            func.sum(Service.base_price)
-        ).join(ServiceRequest).filter(
-            ServiceRequest.status == 'completed',
-            ServiceRequest.completion_date >= current_month
-        ).scalar() or 0.0
-
-        last_month_revenue = db.session.query(
-            func.sum(Service.base_price)
-        ).join(ServiceRequest).filter(
-            ServiceRequest.status == 'completed',
-            ServiceRequest.completion_date >= last_month,
-            ServiceRequest.completion_date < current_month
-        ).scalar() or 0.0
-
-        revenue_growth = 0
-        if last_month_revenue > 0:
-            revenue_growth = ((current_month_revenue - last_month_revenue) / last_month_revenue) * 100
-
-        return jsonify({
-            'total_revenue': total_revenue,
-            'revenue_growth': revenue_growth
-        })
+        logger.debug("Getting available services for registration")
+        services = Service.query.filter_by(status='active').all()
+        logger.debug(f"Found {len(services)} active services")
+        return jsonify([{
+            'id': service.id,
+            'name': service.name,
+            'description': service.description,
+            'base_price': service.base_price,
+            'avg_duration': service.avg_duration
+        } for service in services]), 200
     except Exception as e:
-        return jsonify({'msg': str(e)}), 422
+        logger.error(f"Error getting available services: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-@routes_bp.route('/admin/services', methods=['GET'])
-@jwt_required()
-@admin_required
-def get_services_stats():
+@routes_bp.route('/services/status', methods=['GET'])
+def check_service_status():
+    """Check which services are available for registration"""
     try:
-        total_active_services = Service.query.filter_by(is_active=True).count()
+        logger.debug("Checking service availability status")
+        active_services = Service.query.filter_by(status='active').count()
+        total_services = Service.query.count()
         
-        # Calculate service growth
-        current_month = datetime.now().replace(day=1)
-        last_month = current_month - timedelta(days=1)
-        
-        new_services = Service.query.filter(
-            Service.created_at >= current_month
-        ).count()
-        
-        old_services = Service.query.filter(
-            Service.created_at >= last_month,
-            Service.created_at < current_month
-        ).count()
-
-        service_growth = 0
-        if old_services > 0:
-            service_growth = ((new_services - old_services) / old_services) * 100
-
+        logger.debug(f"Service status: {active_services}/{total_services} services active")
         return jsonify({
-            'total_active_services': total_active_services,
-            'service_growth': service_growth
-        })
-    except Exception as e:
-        return jsonify({'msg': str(e)}), 422
-
-# User statistics
-@routes_bp.route('/admin/users/stats', methods=['GET'])
-@jwt_required()
-@admin_required
-def get_users_stats():
-    try:
-        # Count professionals (excluding admins)
-        total_professionals = User.query.filter_by(role='professional').count()
-        
-        # Count customers (excluding admins)
-        total_customers = User.query.filter_by(role='customer').count()
-        
-        # Calculate user growth by role (comparing current month to previous month)
-        current_month = datetime.now().replace(day=1)
-        last_month = current_month - timedelta(days=1)
-        
-        # Professional growth
-        new_professionals = User.query.filter(
-            User.created_at >= current_month,
-            User.role == 'professional'
-        ).count()
-        
-        old_professionals = User.query.filter(
-            User.created_at >= last_month,
-            User.created_at < current_month,
-            User.role == 'professional'
-        ).count()
-
-        professional_growth = 0
-        if old_professionals > 0:
-            professional_growth = ((new_professionals - old_professionals) / old_professionals) * 100
-
-        # Customer growth
-        new_customers = User.query.filter(
-            User.created_at >= current_month,
-            User.role == 'customer'
-        ).count()
-        
-        old_customers = User.query.filter(
-            User.created_at >= last_month,
-            User.created_at < current_month,
-            User.role == 'customer'
-        ).count()
-
-        customer_growth = 0
-        if old_customers > 0:
-            customer_growth = ((new_customers - old_customers) / old_customers) * 100
-
-        return jsonify({
-            'total_professionals': total_professionals,
-            'professional_growth': professional_growth,
-            'total_customers': total_customers,
-            'customer_growth': customer_growth
+            'active_services': active_services,
+            'total_services': total_services,
+            'status': 'ok' if active_services > 0 else 'no_services'
         }), 200
     except Exception as e:
-        return jsonify({'msg': str(e)}), 422
+        logger.error(f"Error checking service status: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+@routes_bp.route('/services/search', methods=['GET'])
+def search_services():
+    """Search for services with optional location filter"""
+    # Get query parameters for search/filter
+    name = request.args.get('name')
+    pin_code = request.args.get('pin_code')
+    
+    logger.debug(f"Public service search with location: name={name}, pin_code={pin_code}")
+    
+    # Start with base query for services
+    query = Service.query.filter_by(status='active')
+    
+    # Apply filters based on parameters
+    if name:
+        query = query.filter(Service.name.ilike(f'%{name}%'))
+    
+    services = query.all()
+    logger.debug(f"Found {len(services)} active services")
+    
+    # If pin code is provided, find professionals in that area
+    if pin_code:
+        result = []
+        for service in services:
+            # Find professionals for this service type in the area
+            professionals = ServiceProfessional.query.filter(
+                ServiceProfessional.service_type_id == service.id,
+                ServiceProfessional.is_approved == True,
+                ServiceProfessional.is_active == True
+            ).join(Customer, Customer.id == ServiceProfessional.id).filter(
+                Customer.pin_code == pin_code
+            ).all()
+            
+            if professionals:
+                service_data = {
+                    'id': service.id,
+                    'name': service.name,
+                    'base_price': service.base_price,
+                    'description': service.description,
+                    'avg_duration': service.avg_duration,
+                    'available_professionals': len(professionals)
+                }
+                result.append(service_data)
+        logger.debug(f"Found {len(result)} services with professionals in pin code {pin_code}")
+        return jsonify(result), 200
+    
+    # If no pin code, return all active services
+    logger.debug("Returning all active services (no pin code filter)")
+    return jsonify([{
+        'id': service.id,
+        'name': service.name,
+        'base_price': service.base_price,
+        'description': service.description,
+        'avg_duration': service.avg_duration
+    } for service in services]), 200
+
+@routes_bp.route('/professionals/<int:professional_id>', methods=['GET'])
+def get_professional_profile(professional_id):
+    """Get a professional's public profile with reviews"""
+    logger.debug(f"Getting public profile for professional {professional_id}")
+    professional = ServiceProfessional.query.get(professional_id)
+    
+    if not professional:
+        logger.warning(f"Professional {professional_id} not found")
+        return jsonify({'error': 'Professional not found'}), 404
+    
+    if not professional.is_approved or not professional.is_active:
+        logger.warning(f"Professional {professional_id} is not approved or not active")
+        return jsonify({'error': 'This professional is not currently available'}), 404
+    
+    # Get reviews for this professional
+    completed_requests = ServiceRequest.query.filter_by(
+        pro_id=professional_id,
+        status='completed'
+    ).all()
+    
+    reviews_list = []
+    for request in completed_requests:
+        review = Review.query.filter_by(request_id=request.id).first()
+        if review:
+            reviews_list.append({
+                'rating': review.rating,
+                'comment': review.comment,
+                'created_at': review.created_at.isoformat(),
+                'service_name': request.service.name if request.service else 'Unknown Service'
+            })
+    
+    # Create response with professional data and reviews
+    result = professional.to_dict()
+    result['reviews'] = reviews_list
+    logger.debug(f"Found {len(reviews_list)} reviews for professional {professional_id}")
+    
+    return jsonify(result), 200
+
+@routes_bp.route('/documents/<int:document_id>', methods=['GET'])
+@jwt_required()
+def get_document_file(document_id):
+    """Get a document file by ID (requires authentication)"""
+    try:
+        logger.debug(f"Getting document file for document ID: {document_id}")
+        # Get the document
+        document = Document.query.get(document_id)
+        if not document:
+            logger.warning(f"Document {document_id} not found")
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Get current user
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        
+        # Check permissions - only owner or admin can view documents
+        if current_user.role != 'admin' and document.professional_id != current_user_id:
+            logger.warning(f"User {current_user_id} attempted to access document {document_id} without permission")
+            return jsonify({'error': 'You do not have permission to view this document'}), 403
+        
+        # Check if file exists
+        if not os.path.exists(document.file_path):
+            logger.warning(f"Document file not found at path: {document.file_path}")
+            return jsonify({'error': 'Document file not found'}), 404
+        
+        # Get file extension
+        file_extension = document.filename.split('.')[-1].lower()
+        # Set appropriate MIME type
+        mime_types = {
+            'pdf': 'application/pdf',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif'
+        }
+        mime_type = mime_types.get(file_extension, 'application/octet-stream')
+        
+        logger.debug(f"Serving document {document_id} as {mime_type}")
+        # Return the file
+        return send_file(document.file_path, mimetype=mime_type)
+        
+    except Exception as e:
+        logger.error(f"Error getting document file {document_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500

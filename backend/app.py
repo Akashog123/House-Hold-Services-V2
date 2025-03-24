@@ -59,7 +59,7 @@ def create_default_admin():
     """Create a default admin user if no admin exists."""
     admin_exists = Admin.query.first()
     if not admin_exists:
-        admin = Admin(username="admin", full_name="Admin")
+        admin = Admin(username="admin", full_name="Admin", email="admin@gmail.com")
         admin.set_password("password")
         admin.is_approved = True
         db.session.add(admin)

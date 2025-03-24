@@ -12,7 +12,7 @@
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import MainLayout from '@/layouts/MainLayout.vue'
 
@@ -28,6 +28,13 @@ export default {
     // Fix: Use auth/loading instead of isAuthenticated
     const isLoading = computed(() => store.state.auth?.loading || false)
     
+    onMounted(() => {
+      // Initialize pending approvals count if user is admin
+      if (store.getters['auth/isAuthenticated'] && store.getters['auth/user']?.role === 'admin') {
+        store.dispatch('users/fetchPendingApprovalCount');
+      }
+    });
+
     return {
       isLoading
     }

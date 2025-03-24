@@ -26,6 +26,7 @@
                     type="text"
                     class="form-control"
                     id="userInput"
+                    autocomplete="username"
                     placeholder="Enter username or email address"
                     :class="{ 'is-invalid': userInputError }"
                     required
@@ -174,20 +175,25 @@ export default {
           
           if (response && response.token) {
             const userRole = response.user.role
+            console.log('Login successful. User role detected:', userRole);
             let dashboardPath
             
             switch(userRole) {
               case 'admin':
                 dashboardPath = '/admin/dashboard'
+                console.log('Redirecting to admin dashboard');
                 break
               case 'professional':
                 dashboardPath = '/professional/dashboard'
+                console.log('Redirecting to professional dashboard');
                 break
               case 'customer':
                 dashboardPath = '/customer/dashboard'
+                console.log('Redirecting to customer dashboard');
                 break
               default:
                 dashboardPath = '/'
+                console.log('Unknown role, redirecting to home page');
             }
             
             await this.$router.push(dashboardPath)

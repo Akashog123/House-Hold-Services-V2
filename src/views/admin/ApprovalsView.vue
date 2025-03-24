@@ -1,6 +1,6 @@
 <template>
   <div class="approvals-container">
-    <h1>Professional Approvals</h1>
+    <h3>Professional Approvals</h3>
       
       <div v-if="loading" class="loading-state">
         <div class="spinner-border text-primary" role="status">
@@ -50,6 +50,7 @@
 
 <script>
 import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api from '@/services/api.service.js'
 
 export default {
@@ -59,16 +60,35 @@ export default {
     const professionals = ref([])
     const loading = ref(false)
     const error = ref(null)
+    const route = useRoute()
+    const router = useRouter()
 
     const fetchProfessionals = async () => {
       loading.value = true
       error.value = null
       
       try {
-        const response = await api.get('/admin/professionals', {
-          params: { approval_status: 'pending' }
-        })
-        professionals.value = response.data
+        // Check if we have a specific professional_id in query params
+        const professionalId = route.query.professional_id
+        
+        if (professionalId) {
+          // Fetch specific professional details
+          const response = await api.get(`/admin/users/${professionalId}`)
+          
+          // Only add to the list if this professional needs approval
+          if (response.data && response.data.role === 'professional' && !response.data.is_approved) {
+            professionals.value = [response.data]
+          } else {
+            professionals.value = []
+            error.value = 'The specified professional does not require approval or was not found.'
+          }
+        } else {
+          // Fetch all pending professionals
+          const response = await api.get('/admin/professionals', {
+            params: { approved: 'false', active: 'true' }
+          })
+          professionals.value = response.data
+        }
       } catch (err) {
         error.value = 'Failed to load professionals: ' + (err.response?.data?.error || err.message)
       } finally {
@@ -78,19 +98,41 @@ export default {
 
     const approveProfessional = async (id) => {
       try {
+        loading.value = true
         await api.put(`/admin/approve/${id}`)
-        await fetchProfessionals()
+        
+        // If we came from user management view with a specific professional,
+        // redirect back to user management after approval
+        if (route.query.professional_id) {
+          router.push('/admin/users')
+        } else {
+          // Otherwise refresh the list
+          await fetchProfessionals()
+        }
       } catch (err) {
         error.value = 'Failed to approve professional: ' + (err.response?.data?.error || err.message)
+      } finally {
+        loading.value = false
       }
     }
 
     const rejectProfessional = async (id) => {
       try {
-        await api.put(`/admin/reject/${id}`)
-        await fetchProfessionals()
+        loading.value = true
+        await api.put(`/admin/reject/${id}`, {})
+        
+        // If we came from user management view with a specific professional,
+        // redirect back to user management after rejection
+        if (route.query.professional_id) {
+          router.push('/admin/users')
+        } else {
+          // Otherwise refresh the list
+          await fetchProfessionals()
+        }
       } catch (err) {
         error.value = 'Failed to reject professional: ' + (err.response?.data?.error || err.message)
+      } finally {
+        loading.value = false
       }
     }
 

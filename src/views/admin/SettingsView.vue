@@ -1,6 +1,6 @@
 <template>
   <div class="settings-container">
-    <h1>System Settings</h1>
+    <h3>System Settings</h3>
 
       <div class="row">
         <div class="col-md-8">

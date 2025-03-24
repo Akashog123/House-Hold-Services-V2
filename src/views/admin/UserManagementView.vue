@@ -1,5 +1,18 @@
 <template>
-    <h1>User Management</h1>
+    <h3>User Management</h3>
+    
+    <!-- Alert for pending approvals -->
+    <div v-if="pendingApprovals > 0" class="alert alert-warning mb-4">
+      <div class="d-flex justify-content-between align-items-center">
+        <span>
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>{{ pendingApprovals }}</strong> professional registration(s) pending approval
+        </span>
+        <router-link to="/admin/approvals" class="btn btn-sm btn-primary">
+          View Pending Approvals
+        </router-link>
+      </div>
+    </div>
     
     <!-- User filter controls -->
     <div class="filter-controls">
@@ -9,7 +22,6 @@
           <option value="all">All Users</option>
           <option value="professional">Professionals</option>
           <option value="customer">Customers</option>
-          <!-- Removed admin option since there's only one admin -->
         </select>
       </div>
       
@@ -37,7 +49,6 @@
       <table v-if="!loading && !error && filteredUsers.length > 0" class="user-table">
         <thead>
           <tr>
-            <th>ID</th>
             <th>Username</th>
             <th>Email</th>
             <th>Role</th>
@@ -48,7 +59,6 @@
         </thead>
         <tbody>
           <tr v-for="user in filteredUsers" :key="user.id" :class="{ 'inactive': !user.is_active }">
-            <td>{{ user.id }}</td>
             <td>{{ user.username }}</td>
             <td>{{ user.email }}</td>
             <td>{{ user.role }}</td>
@@ -60,22 +70,29 @@
             <td>{{ formatDate(user.created_at) }}</td>
             <td>
               <div class="action-buttons">
+                <!-- Documents button for professionals -->
                 <button 
+                  v-if="user.role === 'professional'" 
+                  class="btn-info" 
+                  @click="viewDocuments(user.id)"
+                  :disabled="loading || user.documents_count === 0"
+                  title="View Documents"
+                >
+                  <i class="bi bi-file-earmark-text"></i>
+                </button>
+              
+                <!-- Replace approve/reject with View Application button -->
+                <router-link 
                   v-if="user.role === 'professional' && !user.is_approved" 
                   class="btn-approve" 
-                  @click="approveUser(user.id)"
+                  :to="{ path: '/admin/approvals', query: { professional_id: user.id }}"
+                  title="View Application"
                 >
-                  Approve
-                </button>
+                  View Application
+                </router-link>
+                
                 <button 
-                  v-if="user.role === 'professional' && user.is_approved" 
-                  class="btn-reject" 
-                  @click="rejectUser(user.id)"
-                >
-                  Reject
-                </button>
-                <button 
-                  v-if="user.is_active" 
+                    v-if="(user.role === 'professional' || user.role === 'customer') && user.is_approved && user.is_active" 
                   class="btn-block" 
                   @click="blockUser(user.id)"
                 >
@@ -98,10 +115,74 @@
         No users found matching your filters.
       </div>
     </div>
+
+    <!-- Documents Modal -->
+    <div class="modal fade" id="documentsModal" tabindex="-1" ref="documentsModalRef">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Professional Documents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div v-if="loadingDocuments" class="text-center py-5">
+              <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            
+            <div v-else-if="documentError" class="alert alert-danger">
+              {{ documentError }}
+            </div>
+            
+            <div v-else-if="documents.length === 0" class="text-center py-4">
+              <i class="bi bi-file-earmark-x display-6 text-muted"></i>
+              <p class="mt-3">No documents available</p>
+            </div>
+            
+            <div v-else>
+              <div v-for="doc in documents" :key="doc.id" class="document-item mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0 text-capitalize">
+                    <i class="bi bi-file-earmark me-1"></i>
+                    {{ formatDocumentType(doc.document_type) }}
+                  </h6>
+                  <span class="badge" :class="doc.verified ? 'bg-success' : 'bg-warning'">
+                    {{ doc.verified ? 'Verified' : 'Not Verified' }}
+                  </span>
+                </div>
+                
+                <div class="document-preview p-2 border rounded">
+                  <div class="d-flex justify-content-center my-2">
+                    <a :href="`/api/documents/${doc.id}`" target="_blank" class="btn btn-sm btn-primary">
+                      <i class="bi bi-eye me-1"></i> View Document
+                    </a>
+                    <button 
+                      class="btn btn-sm ms-2" 
+                      :class="doc.verified ? 'btn-outline-success' : 'btn-success'" 
+                      @click="toggleVerification(doc.id, !doc.verified)"
+                    >
+                      <i class="bi" :class="doc.verified ? 'bi-x-circle' : 'bi-check-circle'"></i>
+                      {{ doc.verified ? 'Mark as Unverified' : 'Mark as Verified' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
 </template>
 
 <script>
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '@/services/api.service.js'
+import { Modal } from 'bootstrap'
 
 export default {
   name: 'UserManagementView',
@@ -112,11 +193,24 @@ export default {
       error: null,
       userTypeFilter: 'all',
       userStatusFilter: 'all',
-      searchQuery: ''
+      searchQuery: '',
+      // Document related state
+      documents: [],
+      loadingDocuments: false,
+      documentError: null,
+      documentsModalRef: null,
+      documentsModal: null
     }
   },
   created() {
     this.fetchUsers()
+  },
+  mounted() {
+    // Initialize Bootstrap modal when component is mounted
+    this.documentsModalRef = this.$refs.documentsModalRef
+    if (this.documentsModalRef) {
+      this.documentsModal = new Modal(this.documentsModalRef)
+    }
   },
   computed: {
     filteredUsers() {
@@ -152,6 +246,11 @@ export default {
         
         return true;
       });
+    },
+    pendingApprovals() {
+      return this.users.filter(user => 
+        user.role === 'professional' && !user.is_approved && user.is_active
+      ).length
     }
   },
   methods: {
@@ -179,30 +278,6 @@ export default {
       return date.toLocaleDateString()
     },
     
-    async approveUser(userId) {
-      try {
-        this.loading = true
-        await api.put(`/admin/approve/${userId}`)
-        await this.fetchUsers()
-        this.loading = false
-      } catch (err) {
-        this.error = 'Failed to approve user: ' + (err.response?.data?.error || err.message)
-        this.loading = false
-      }
-    },
-    
-    async rejectUser(userId) {
-      try {
-        this.loading = true
-        await api.put(`/admin/reject/${userId}`)
-        await this.fetchUsers()
-        this.loading = false
-      } catch (err) {
-        this.error = 'Failed to reject user: ' + (err.response?.data?.error || err.message)
-        this.loading = false
-      }
-    },
-    
     async blockUser(userId) {
       if (confirm('Are you sure you want to block this user?')) {
         try {
@@ -226,6 +301,52 @@ export default {
       } catch (err) {
         this.error = 'Failed to unblock user: ' + (err.response?.data?.error || err.message)
         this.loading = false
+      }
+    },
+    
+    // Document methods
+    async viewDocuments(userId) {
+      this.loadingDocuments = true
+      this.documentError = null
+      this.documents = []
+      
+      if (this.documentsModal) {
+        this.documentsModal.show()
+      }
+      
+      try {
+        const response = await api.get(`/admin/users/${userId}/documents`)
+        this.documents = response.data
+      } catch (err) {
+        console.error('Failed to fetch documents:', err)
+        this.documentError = 'Failed to load documents: ' + (err.response?.data?.error || err.message)
+      } finally {
+        this.loadingDocuments = false
+      }
+    },
+    
+    formatDocumentType(type) {
+      if (!type) return 'Document'
+      
+      // Convert camelCase or snake_case to readable format
+      return type
+        .replace(/([A-Z])/g, ' $1') // Insert space before capital letters
+        .replace(/_/g, ' ')         // Replace underscores with spaces
+        .replace(/^\w/, c => c.toUpperCase()) // Capitalize first letter
+    },
+    
+    async toggleVerification(documentId, verified) {
+      try {
+        await api.put(`/admin/documents/${documentId}/verify`, { verified })
+        
+        // Update the document in the local array
+        const index = this.documents.findIndex(d => d.id === documentId)
+        if (index !== -1) {
+          this.documents[index].verified = verified
+        }
+      } catch (err) {
+        console.error('Failed to update document verification:', err)
+        this.documentError = 'Failed to update document: ' + (err.response?.data?.error || err.message)
       }
     }
   }
@@ -380,5 +501,25 @@ h1 {
   padding: 30px;
   color: #666;
   font-style: italic;
+}
+
+/* Additional styles for document section */
+.btn-info {
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.btn-info:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.document-preview {
+  background-color: #f8f9fa;
 }
 </style>

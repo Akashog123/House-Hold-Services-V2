@@ -21,18 +21,7 @@ class AdminService {
     return api.get('/admin/services')
       .then(response => {
         console.log("AdminService: Services fetched successfully", response.data)
-        // Ensure consistent response format
-        if (response.data && !response.data.data) {
-          // Wrap the response in a standard format if needed
-          return {
-            ...response,
-            data: {
-              status: 'success',
-              data: Array.isArray(response.data) ? response.data : []
-            }
-          };
-        }
-        return response
+        return response;
       })
       .catch(error => {
         console.error("AdminService: Error fetching services", error.response?.data || error.message)
@@ -98,8 +87,17 @@ class AdminService {
       return Promise.reject(new Error('Duration must be at least 1 minute'))
     }
 
-    console.log(`AdminService: Updating service ${serviceId} with data:`, payload)
+    console.log(`AdminService: Updating service ${serviceId} with data:`, payload);
+    
     return api.put(`/admin/services/${serviceId}`, payload)
+      .then(response => {
+        console.log(`AdminService: Service ${serviceId} updated successfully, response:`, response.data);
+        return response;
+      })
+      .catch(error => {
+        console.error(`AdminService: Error updating service ${serviceId}:`, error.response?.data || error.message);
+        throw error;
+      });
   }
 
   deleteService(serviceId) {

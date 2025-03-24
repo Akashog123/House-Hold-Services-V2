@@ -120,7 +120,7 @@ const routes = [
       },
       { path: 'approvals',
         name: 'AdminApprovals',
-        component: () => import('@/views/admin/ApprovalsView.vue')
+        component: () => import('@/views/admin/ProfessionalApprovalView.vue')
       }
     ]
   },

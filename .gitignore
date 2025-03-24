@@ -28,3 +28,8 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+venv
+*.env
+.flaskenv
+.env
+uploads/
