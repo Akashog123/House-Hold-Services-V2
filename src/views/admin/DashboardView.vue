@@ -72,6 +72,7 @@
                     class="bi"
                     :class="stat.trend >= 0 ? 'bi-arrow-up' : 'bi-arrow-down'"
                   ></i>
+                  {{ Math.abs(stat.trend) }}%
                 </span>
               </div>
             </div>
@@ -144,8 +145,8 @@ export default {
         color: 'warning'
       },
       {
-        title: 'Revenue',
-        value: '$0',
+        title: "Professional's Revenues",
+        value: '₹0',
         trend: 0,
         icon: 'bi-currency-dollar',
         color: 'info'
@@ -174,20 +175,20 @@ export default {
           revenue: revenueResponse.data
         });
 
-        // Handle professional count with safety checks
-        if (usersResponse.data && typeof usersResponse.data.total_professionals !== 'undefined') {
-          stats.value[0].value = String(usersResponse.data.total_professionals);
-          stats.value[0].trend = usersResponse.data.professional_growth || 0;
+        // Handle customer count with safety checks
+        if (usersResponse.data && typeof usersResponse.data.total_customers !== 'undefined') {
+          stats.value[0].value = String(usersResponse.data.total_customers);
+          stats.value[0].trend = usersResponse.data.customer_growth || 0;
         } else {
           // Fallback if data doesn't match expected structure
           stats.value[0].value = '0';
           stats.value[0].trend = 0;
         }
 
-        // Handle customer count with safety checks
-        if (usersResponse.data && typeof usersResponse.data.total_customers !== 'undefined') {
-          stats.value[1].value = String(usersResponse.data.total_customers);
-          stats.value[1].trend = usersResponse.data.customer_growth || 0;
+        // Handle professional count with safety checks
+        if (usersResponse.data && typeof usersResponse.data.total_professionals !== 'undefined') {
+          stats.value[1].value = String(usersResponse.data.total_professionals);
+          stats.value[1].trend = usersResponse.data.professional_growth || 0;
         } else {
           // Fallback if data doesn't match expected structure
           stats.value[1].value = '0';
@@ -218,10 +219,10 @@ export default {
         // Handle revenue data safely
         if (revenueResponse.data && typeof revenueResponse.data.total_revenue !== 'undefined') {
           const totalRevenue = parseFloat(revenueResponse.data.total_revenue) || 0;
-          stats.value[4].value = `$${totalRevenue.toFixed(2)}`;
+          stats.value[4].value = `₹${totalRevenue.toFixed(2)}`;
           stats.value[4].trend = revenueResponse.data.revenue_growth || 0;
         } else {
-          stats.value[4].value = '$0.00';
+          stats.value[4].value = '₹0.00';
           stats.value[4].trend = 0;
         }
 
@@ -248,7 +249,7 @@ export default {
         // Reset stats to default values to prevent further errors
         stats.value = stats.value.map(stat => ({
           ...stat,
-          value: stat.title.includes('Revenue') ? '$0.00' : '0',
+          value: stat.title.includes("Professional's Revenues") ? '₹0.00' : '0',
           trend: 0
         }));
       } finally {

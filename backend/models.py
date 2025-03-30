@@ -61,9 +61,9 @@ class ServiceProfessional(User):
     __tablename__ = 'service_professionals'
     
     id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
-    full_name = db.Column(db.String(100))
     phone_number = db.Column(db.String(20))
     description = db.Column(db.Text)
+    pin_code = db.Column(db.String(20))
     service_type_id = db.Column(db.Integer, db.ForeignKey('services.id'))
     experience_years = db.Column(db.Integer, default=0)
     average_rating = db.Column(db.Float, default=0.0)
@@ -83,6 +83,9 @@ class ServiceProfessional(User):
         data.update({
             'service_type_id': self.service_type_id,
             'description': self.description,
+            'phone_number': self.phone_number,
+            'pin_code': self.pin_code,
+            'rejection_reason': self.rejection_reason,
             'experience_years': self.experience_years,
             'average_rating': self.average_rating,
             'total_reviews': self.total_reviews,
@@ -96,14 +99,12 @@ class ServiceProfessional(User):
 class Customer(User):
     __mapper_args__ = {'polymorphic_identity': 'customer'}
     address = db.Column(db.String(200))
-    pin_code = db.Column(db.String(20))
     phone_number = db.Column(db.String(20))
     
     def to_dict(self):
         data = super().to_dict()
         data.update({
             'address': self.address,
-            'pin_code': self.pin_code,
             'phone_number': self.phone_number
         })
         return data
@@ -119,6 +120,7 @@ class Service(db.Model):
     status = db.Column(db.String(20), default='active')  # active, inactive, deleted (optional)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    image_path = db.Column(db.String(255), nullable=True)
 
     def __repr__(self):
         return f'<Service {self.name}>'
@@ -130,14 +132,18 @@ class ServiceRequest(db.Model):
     service_id = db.Column(db.Integer, db.ForeignKey('services.id'))
     customer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     pro_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    status = db.Column(db.String(20), default='requested')  # requested, assigned, in_progress, completed
+    status = db.Column(db.String(20), default='requested')  # requested, assigned, completed, cancelled
     request_date = db.Column(db.DateTime, default=datetime.utcnow)
-    completion_date = db.Column(db.DateTime, nullable=True)
+    completion_date = db.Column(db.DateTime, nullable=True) # When job was requested to be completed
+    assigned_date = db.Column(db.DateTime, nullable=True)  # When professional accepted the job
+    completed_on = db.Column(db.DateTime, nullable=True)  # When job was actually completed
+    cancelled_on = db.Column(db.DateTime, nullable=True)  # When job was actually cancelled
+    cancelled_by = db.Column(db.String(20), nullable=True)  # 'customer' or 'professional'
     notes = db.Column(db.Text, nullable=True)  # Customer notes for the request
     
     service = db.relationship('Service', backref='requests')
-    customer = db.relationship('User', foreign_keys=[customer_id])
-    professional = db.relationship('User', foreign_keys=[pro_id])
+    customer = db.relationship('Customer', foreign_keys=[customer_id])
+    professional = db.relationship('ServiceProfessional', foreign_keys=[pro_id])
 
 class Review(db.Model):
     __tablename__ = 'reviews'

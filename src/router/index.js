@@ -79,7 +79,7 @@ const routes = [
   },
   { path: '/services',
     name: 'Services',
-    component: () => import('@/components/services/ServiceCard.vue')
+    component: () => import('../views/services/ServicesList.vue')
   },
   { path: '/forgot-password',
     name: 'ForgotPassword',
@@ -114,10 +114,6 @@ const routes = [
         name: 'AdminSettings',
         component: () => import('@/views/admin/SettingsView.vue')
       },
-      { path: 'profile',
-        name: 'AdminProfile',
-        component: () => import('@/views/admin/ProfileView.vue')
-      },
       { path: 'approvals',
         name: 'AdminApprovals',
         component: () => import('@/views/admin/ProfessionalApprovalView.vue')
@@ -131,7 +127,25 @@ const routes = [
         path: 'dashboard',
         name: 'ProfessionalDashboard',
         component: () => import('@/views/professional/DashboardView.vue')
-      } // Fix: Added missing closing bracket
+      },
+      {
+        path: 'bookings',
+        name: 'ProfessionalBookings',
+        component: () => import('@/views/professional/BookingsView.vue'),
+        meta: {
+          requiresAuth: true,
+          role: 'professional'
+        }
+      },
+      {
+        path: 'history',
+        name: 'ProfessionalServiceHistory',
+        component: () => import('@/views/professional/ServiceHistoryView.vue'),
+        meta: {
+          requiresAuth: true,
+          role: 'professional'
+        }
+      }
     ]
   }, 
   { path: '/customer',
@@ -141,9 +155,36 @@ const routes = [
         path: 'dashboard',
         name: 'CustomerDashboard',
         component: () => import('@/views/customer/DashboardView.vue')
+      },
+      {
+        path: 'bookings',
+        name: 'CustomerBookings',
+        component: () => import('@/views/customer/BookingsView.vue'),
+        meta: {
+          requiresAuth: true,
+          role: 'customer'
+        }
+      },
+      {
+        path: 'history',
+        name: 'CustomerServiceHistory',
+        component: () => import('@/views/customer/ServiceHistoryView.vue'),
+        meta: {
+          requiresAuth: true,
+          role: 'customer'
+        }
       }
       // Other customer routes...
     ]
+  },
+  {
+    path: '/book-service',
+    name: 'BookService',
+    component: () => import('../views/services/BookService.vue'),
+    meta: {
+      requiresAuth: true,
+      role: 'customer'
+    }
   }
 ]
 const router = createRouter({
@@ -165,26 +206,45 @@ router.beforeEach((to, from, next) => {
   console.log('Auth token exists:', !!store.getters['auth/token']);
   console.log('User in store:', store.getters['auth/user']);
   console.log('localStorage token:', !!localStorage.getItem('auth_token'));
-
+  
   // Check for routes requiring authentication
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!isAuthenticated) {
+      console.log('Unauthenticated user redirected to login');
       next('/login');
       return;
     }
     
     // Role-based route protection
     if (to.matched.some(record => record.meta.requiresAdmin) && userRole !== 'admin') {
+      console.log('Non-admin user tried to access admin route');
       next('/unauthorized');
       return;
     }
     
     if (to.matched.some(record => record.meta.requiresProfessional) && userRole !== 'professional') {
+      console.log('Non-professional user tried to access professional route');
       next('/unauthorized');
       return;
     }
     
     if (to.matched.some(record => record.meta.requiresCustomer) && userRole !== 'customer') {
+      console.log('Non-customer user tried to access customer route');
+      next('/unauthorized');
+      return;
+    }
+    
+    // Redirect users to their respective dashboards if they try to access another role's route
+    const path = to.path.toLowerCase();
+    if (path.includes('/admin/') && userRole !== 'admin') {
+      next('/unauthorized');
+      return;
+    }
+    if (path.includes('/professional/') && userRole !== 'professional') {
+      next('/unauthorized');
+      return;
+    }
+    if (path.includes('/customer/') && userRole !== 'customer') {
       next('/unauthorized');
       return;
     }

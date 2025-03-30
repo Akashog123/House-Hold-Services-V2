@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard-container">
     <!-- Dashboard Header -->
-    <div class="dashboard-header mb-4">
+    <div class="dashboard-header mb-3">
       <h1 class="h3">{{ title }}</h1>
       <slot name="header-actions"></slot>
     </div>

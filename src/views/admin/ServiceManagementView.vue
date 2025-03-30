@@ -33,6 +33,14 @@
                 </td>
                 <td>
                   <button 
+                    v-if="service.image_path" 
+                    class="btn btn-sm btn-outline-info me-2"
+                    @click="previewImage(service)"
+                    title="Preview Image"
+                  >
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  <button 
                     class="btn btn-sm me-2"
                     :class="service.status === 'inactive' ? 'btn-outline-success' : 'btn-outline-secondary'"
                     @click="toggleServiceStatus(service)"
@@ -70,7 +78,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">
+            <h5 class="modal-title text-white">
               {{ isEditing ? 'Edit Service' : 'Create New Service' }}
             </h5>
             <button 
@@ -138,6 +146,38 @@
                 ></textarea>
               </div>
 
+              <div class="mb-3">
+                <label class="form-label">Service Image</label>
+                <input 
+                  type="file"
+                  class="form-control"
+                  accept="image/*"
+                  @change="handleImageChange"
+                  ref="imageInput"
+                >
+                <small class="form-text text-muted">
+                  Upload a reference image for this service (PNG, JPG, JPEG, GIF)
+                </small>
+                
+                <!-- Preview current image -->
+                <div v-if="imagePreview || (isEditing && serviceForm.image_path)" class="mt-2">
+                  <div class="image-preview-container">
+                    <img 
+                      :src="imagePreview || getImageUrl(serviceForm.image_path)" 
+                      alt="Service image preview" 
+                      class="img-thumbnail service-image-preview"
+                    >
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-danger remove-image-btn" 
+                      @click="removeImage"
+                    >
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div class="modal-footer">
                 <button 
                   type="button" 
@@ -171,7 +211,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Confirm Delete</h5>
+            <h5 class="modal-title text-white">Confirm Delete</h5>
             <button 
               type="button" 
               class="btn-close" 
@@ -203,6 +243,40 @@
       </div>
     </div>
 
+    <!-- Image Preview Modal -->
+    <div 
+      class="modal fade" 
+      id="imagePreviewModal" 
+      tabindex="-1"
+      ref="imagePreviewModal"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title text-white">
+              {{ previewService ? previewService.name : 'Image Preview' }}
+            </h5>
+            <button 
+              type="button" 
+              class="btn-close" 
+              @click="closeImagePreviewModal"
+            ></button>
+          </div>
+          <div class="modal-body text-center">
+            <img 
+              v-if="previewService && previewService.image_path" 
+              :src="getImageUrl(previewService.image_path)"
+              alt="Service image preview" 
+              class="img-fluid service-preview-image"
+            >
+            <div v-else class="alert alert-info">
+              No image available for this service.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast container for notifications -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
       <div 
@@ -228,7 +302,6 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import adminService from '@/services/admin.service'
-import authService from '@/services/auth.service'
 import { Modal, Toast } from 'bootstrap'
 
 export default {
@@ -247,12 +320,19 @@ export default {
     const formError = ref(null)
     const successMessage = ref('')
     const successToast = ref(null)
-    
+    const imageInput = ref(null)
+    const imagePreview = ref(null)
+    const imageRemoved = ref(false)
+    const imagePreviewModal = ref(null)
+    const previewService = ref(null)
+
     const serviceForm = ref({
       name: '',
       base_price: '',
       avg_duration: '',
-      description: ''
+      description: '',
+      image: null,
+      image_path: ''
     })
 
     onMounted(() => {
@@ -324,8 +404,13 @@ export default {
         name: '',
         base_price: '',
         avg_duration: '',
-        description: ''
+        description: '',
+        image: null,
+        image_path: ''
       }
+      imagePreview.value = null
+      imageRemoved.value = false
+      
       // Make sure modal reference exists
       if (serviceModal.value) {
         console.log("Opening create modal");
@@ -347,6 +432,8 @@ export default {
       
       isEditing.value = true
       currentServiceId.value = service.id
+      imagePreview.value = null
+      imageRemoved.value = false
       
       // Create a new object for the form to avoid modifying the original service
       serviceForm.value = {
@@ -354,7 +441,9 @@ export default {
         base_price: service.base_price,
         avg_duration: service.avg_duration,
         description: service.description || '',
-        status: service.status || 'active'
+        status: service.status || 'active',
+        image_path: service.image_path || '',
+        image: null
       }
       
       // Make sure modal reference exists
@@ -410,8 +499,28 @@ export default {
       
       try {
         console.log("Saving service:", isEditing.value ? "update" : "create");
-        console.log("Service data:", serviceForm.value);
-        console.log("Service ID (for edits):", currentServiceId.value);
+        
+        // Create a form data object with the form values and image if present
+        const formData = new FormData();
+        formData.append('name', serviceForm.value.name?.trim());
+        formData.append('base_price', parseFloat(serviceForm.value.base_price) || 0);
+        formData.append('description', serviceForm.value.description?.trim() || '');
+        formData.append('avg_duration', parseInt(serviceForm.value.avg_duration) || 0);
+        
+        // Status is only relevant for updates
+        if (isEditing.value && serviceForm.value.status) {
+          formData.append('status', serviceForm.value.status);
+        }
+        
+        // Add image if one is selected
+        if (serviceForm.value.image) {
+          formData.append('image', serviceForm.value.image);
+        }
+        
+        // If image was removed, we need to handle that
+        if (imageRemoved.value) {
+          formData.append('remove_image', 'true');
+        }
         
         let response;
         
@@ -420,7 +529,7 @@ export default {
             throw new Error("Cannot update service: Missing service ID");
           }
           response = await adminService.updateService(currentServiceId.value, serviceForm.value)
-          console.log(`Service ₹{currentServiceId.value} updated successfully`);
+          console.log(`Service ${currentServiceId.value} updated successfully`);
           showSuccessToast("Service updated successfully");
         } else {
           response = await adminService.createService(serviceForm.value)
@@ -446,6 +555,54 @@ export default {
         loading.value = false
       }
     }
+
+    // Handle image selection
+    const handleImageChange = (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      // Check if file is an image
+      if (!file.type.startsWith('image/')) {
+        formError.value = 'Please select an image file';
+        return;
+      }
+      
+      // Store the file for upload
+      serviceForm.value.image = file;
+      imageRemoved.value = false;
+      
+      // Create a preview
+      const reader = new FileReader();
+      reader.onload = e => {
+        imagePreview.value = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+    
+    // Remove the selected image
+    const removeImage = () => {
+      serviceForm.value.image = null;
+      imagePreview.value = null;
+      imageRemoved.value = true;
+      
+      // Clear the file input
+      if (imageInput.value) {
+        imageInput.value.value = '';
+      }
+    };
+    
+    // Get the URL for an image path
+    const getImageUrl = (path) => {
+      if (!path) return '';
+      
+      // Check if the path is already a full URL
+      if (path.startsWith('http')) {
+        return path;
+      }
+      
+      // Otherwise, prepend the API base URL - using Vite's environment variables format
+      return `${import.meta.env.VITE_API_URL || ''}${path}`;
+    };
 
     const confirmDelete = (service) => {
       console.log("confirmDelete called for service:", service);
@@ -580,6 +737,35 @@ export default {
       }
     };
 
+    const previewImage = (service) => {
+      if (!service || !service.image_path) {
+        console.warn("No image available to preview for service:", service);
+        return;
+      }
+      
+      previewService.value = service;
+      
+      // Make sure modal reference exists
+      if (imagePreviewModal.value) {
+        nextTick(() => {
+          new Modal(imagePreviewModal.value).show();
+        });
+      } else {
+        console.error("Image preview modal reference is null");
+      }
+    }
+
+    const closeImagePreviewModal = () => {
+      const modalInstance = Modal.getInstance(imagePreviewModal.value);
+      if (modalInstance) {
+        modalInstance.hide();
+        // Reset preview service after modal closes
+        setTimeout(() => {
+          previewService.value = null;
+        }, 300);
+      }
+    }
+
     const getStatusBadgeClass = (status) => {
       const classes = {
         active: 'badge bg-success',
@@ -599,6 +785,11 @@ export default {
       formError,
       successToast,
       successMessage,
+      imageInput,
+      imagePreview,
+      handleImageChange,
+      removeImage,
+      getImageUrl,
       openCreateModal,
       editService,
       closeModal,
@@ -608,7 +799,11 @@ export default {
       deleteService,
       getStatusBadgeClass,
       showSuccessToast,
-      toggleServiceStatus
+      toggleServiceStatus,
+      imagePreviewModal,
+      previewService,
+      previewImage,
+      closeImagePreviewModal
     }
   }
 }
@@ -639,5 +834,41 @@ export default {
 /* Toast styles */
 .toast-container {
   z-index: 9999;
+}
+
+.no-image {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #666;
+}
+
+.image-preview-container {
+  position: relative;
+  display: inline-block;
+}
+
+.service-image-preview {
+  max-width: 200px;
+  max-height: 200px;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  border-radius: 50%;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Image preview modal styles */
+.service-preview-image {
+  max-height: 70vh;
+  max-width: 100%;
 }
 </style>

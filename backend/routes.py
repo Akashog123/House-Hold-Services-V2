@@ -7,12 +7,21 @@ from sqlalchemy import func
 from datetime import timedelta
 import os
 import logging
+from werkzeug.utils import secure_filename
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 routes_bp = Blueprint('routes', __name__)
+
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'service-images')
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 #=======================================================================
 # ADMIN ROUTES
@@ -34,15 +43,66 @@ def get_all_users():
 @routes_bp.route('/admin/professionals', methods=['GET'])
 @admin_required
 def get_professionals():
-    """Get all professional users"""
+    """Get all professional users with optional filters"""
     try:
-        logger.debug("Admin requesting all professionals")
-        professionals = ServiceProfessional.query.all()
-        logger.debug(f"Found {len(professionals)} professionals")
-        return jsonify([pro.to_dict() for pro in professionals]), 200
+        # Get query parameters
+        approval_status = request.args.get('approved')
+        active_status = request.args.get('active')
+        include_verification = request.args.get('include_verification', 'false').lower() == 'true'
+        
+        logger.debug(f"Admin requesting professionals with filters: approved={approval_status}, active={active_status}, include_verification={include_verification}")
+        
+        # Start with base query for all professionals
+        query = ServiceProfessional.query
+        
+        # Apply filters if provided
+        if approval_status is not None:
+            is_approved = approval_status.lower() == 'true'
+            query = query.filter(ServiceProfessional.is_approved == is_approved)
+        
+        if active_status is not None:
+            is_active = active_status.lower() == 'true'
+            query = query.filter(ServiceProfessional.is_active == is_active)
+        
+        professionals = query.all()
+        logger.debug(f"Found {len(professionals)} professionals matching criteria")
+        
+        # If verification info is requested, include it
+        if include_verification:
+            result = []
+            for pro in professionals:
+                pro_data = pro.to_dict()
+                
+                # Get documents for verification status
+                docs = Document.query.filter_by(professional_id=pro.id).all()
+                pro_data['documents_count'] = len(docs)
+                
+                # Initialize document verification status
+                doc_types = {'idProof': False, 'addressProof': False, 'qualification': False}
+                
+                # Check verification status for each document
+                for doc in docs:
+                    if doc.document_type in doc_types:
+                        doc_types[doc.document_type] = doc.verified
+                
+                # Set overall verification status
+                pro_data['documents_verified'] = all(doc_types.values()) and len(docs) >= 3
+                pro_data['documents_status'] = doc_types
+                
+                # Get service name if available
+                if pro.service_type_id:
+                    service = Service.query.get(pro.service_type_id)
+                    pro_data['service_name'] = service.name if service else None
+                
+                result.append(pro_data)
+            
+            return jsonify(result), 200
+        else:
+            # Just return basic professional info without verification details
+            return jsonify([pro.to_dict() for pro in professionals]), 200
     except Exception as e:
         logger.error(f"Error getting professionals: {str(e)}")
-        return jsonify({'msg': str(e)}), 422
+        return jsonify({'error': str(e)}), 422
 
 @routes_bp.route('/admin/professionals/details', methods=['GET'])
 @admin_required
@@ -106,12 +166,11 @@ def approve_user(user_id):
             documents = Document.query.filter_by(professional_id=user_id).all()
             
             # Check if the professional has uploaded all required documents
-            required_doc_types = ['id_proof', 'address_proof', 'qualification']
+            required_doc_types = ['idProof', 'addressProof', 'qualification']
             uploaded_doc_types = [doc.document_type for doc in documents]
             
-            # We require at least id_proof and address_proof
-            essential_docs = ['id_proof', 'address_proof']
-            missing_docs = [doc_type for doc_type in essential_docs if doc_type not in uploaded_doc_types]
+            # Check for missing documents
+            missing_docs = [doc_type for doc_type in required_doc_types if doc_type not in uploaded_doc_types]
             
             if missing_docs:
                 logger.warning(f"Professional is missing required documents: {missing_docs}")
@@ -121,12 +180,20 @@ def approve_user(user_id):
                 }), 400
             
             # Check if all uploaded documents are verified
-            unverified_docs = [doc for doc in documents if not doc.verified]
+            verified_status = {}
+            for doc_type in required_doc_types:
+                matching_docs = [doc for doc in documents if doc.document_type == doc_type]
+                if not matching_docs or not matching_docs[0].verified:
+                    verified_status[doc_type] = False
+                else:
+                    verified_status[doc_type] = True
+            
+            unverified_docs = [doc_type for doc_type, verified in verified_status.items() if not verified]
             if unverified_docs:
-                logger.warning(f"Professional has unverified documents: {[doc.document_type for doc in unverified_docs]}")
+                logger.warning(f"Professional has unverified documents: {unverified_docs}")
                 return jsonify({
                     'error': 'Cannot approve professional with unverified documents',
-                    'unverified_documents': [doc.document_type for doc in unverified_docs]
+                    'unverified_documents': unverified_docs
                 }), 400
         
         # Update user approval status
@@ -265,15 +332,21 @@ def search_professionals():
                 docs = Document.query.filter_by(professional_id=pro.id).all()
                 pro_data['documents_count'] = len(docs)
                 
-                # Check verification status
-                pro_data['documents_verified'] = all(doc.verified for doc in docs) if docs else False
+                # Initialize document verification status
+                doc_types = {'idProof': False, 'addressProof': False, 'qualification': False}
+                
+                # Check verification status for each document
+                for doc in docs:
+                    if doc.document_type in doc_types:
+                        doc_types[doc.document_type] = doc.verified
+                
+                # Set overall verification status to true only if all required documents are verified
+                pro_data['documents_verified'] = all(doc_types.values()) and len(docs) >= 3
                 
                 # Add individual document status
-                pro_data['documents_status'] = {
-                    'id_proof': next((True for doc in docs if doc.document_type == 'id_proof' and doc.verified), False),
-                    'address_proof': next((True for doc in docs if doc.document_type == 'address_proof' and doc.verified), False),
-                    'qualification': next((True for doc in docs if doc.document_type == 'qualification' and doc.verified), False)
-                }
+                pro_data['documents_status'] = doc_types
+                
+                logger.debug(f"Professional {pro.id} documents_verified={pro_data['documents_verified']}, status={doc_types}")
             
             result.append(pro_data)
         
@@ -341,9 +414,9 @@ def get_user_documents(user_id):
 @routes_bp.route('/admin/documents/<int:document_id>/verify', methods=['PUT'])
 @admin_required
 def verify_document(document_id):
-    """Verify a document as valid/authentic"""
+    """Verify or unverify a document"""
     try:
-        logger.debug(f"Admin verifying document ID: {document_id}")
+        logger.debug(f"Admin toggling verification for document ID: {document_id}")
         # Check if document exists
         document = Document.query.get(document_id)
         if not document:
@@ -358,25 +431,37 @@ def verify_document(document_id):
         document.verified = verified
         logger.debug(f"Setting document {document_id} verification status to {verified}")
         
-        # If all documents are verified, update professional's documents_verified flag
-        if verified:
-            professional = ServiceProfessional.query.get(document.professional_id)
-            if professional:
-                # Count documents
+        # Get the professional
+        professional = ServiceProfessional.query.get(document.professional_id)
+        if professional:
+            if verified:
+                # If verifying, check if all documents are now verified
                 all_docs = Document.query.filter_by(professional_id=professional.id).all()
                 all_verified = all(doc.verified for doc in all_docs)
                 
                 if all_verified:
                     logger.info(f"All documents verified for professional ID {professional.id}")
                     professional.documents_verified = True
-                    db.session.commit()
+                else:
+                    # Some documents still unverified
+                    logger.info(f"Not all documents verified for professional ID {professional.id}")
+                    professional.documents_verified = False
+            else:
+                # If unverifying, immediately set documents_verified to False
+                logger.info(f"Document {document_id} unverified, setting professional {professional.id} documents_verified to False")
+                professional.documents_verified = False
         
         db.session.commit()
         
-        return jsonify({'message': 'Document verification status updated', 'document': document.to_dict()}), 200
+        # Return updated document along with verification status
+        return jsonify({
+            'message': f'Document {verified and "verified" or "unverified"} successfully',
+            'document': document.to_dict(),
+            'all_verified': professional.documents_verified if professional else False
+        }), 200
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error verifying document {document_id}: {str(e)}")
+        logger.error(f"Error updating document verification {document_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 #=======================================================================
@@ -401,12 +486,20 @@ def manage_services():
                 'base_price': float(service.base_price),
                 'description': service.description,
                 'avg_duration': int(service.avg_duration),
-                'status': service.status
+                'status': service.status,
+                'image_path': service.image_path
             } for service in services]), 200
 
         elif request.method == 'POST':
-            data = request.get_json()
-            logger.debug(f"Create service request data: {data}")
+            # Check if multipart form data (file upload)
+            if request.content_type and 'multipart/form-data' in request.content_type:
+                # Handle form data with possible file upload
+                data = request.form
+                logger.debug(f"Create service request form data: {data}")
+            else:
+                # Handle JSON data
+                data = request.get_json()
+                logger.debug(f"Create service request JSON data: {data}")
             
             # Validate required fields
             required_fields = ['name', 'base_price', 'description', 'avg_duration']
@@ -418,7 +511,7 @@ def manage_services():
                 }), 400
 
             # Validate data types and values
-            if not isinstance(data['name'], str) or len(data['name']) == 0:
+            if not data['name'] or len(data['name'].strip()) == 0:
                 return jsonify({'status': 'error', 'message': 'Invalid name'}), 400
             
             try:
@@ -429,7 +522,7 @@ def manage_services():
                 logger.warning(f"Invalid base price: {data.get('base_price')}")
                 return jsonify({'status': 'error', 'message': 'Invalid base price'}), 400
 
-            if not isinstance(data['description'], str):
+            if not data['description']:
                 return jsonify({'status': 'error', 'message': 'Invalid description'}), 400
             
             try:
@@ -440,12 +533,34 @@ def manage_services():
                 logger.warning(f"Invalid avg_duration: {data.get('avg_duration')}")
                 return jsonify({'status': 'error', 'message': 'Invalid average duration'}), 400
 
+            # Handle image upload
+            image_path = None
+            if 'image' in request.files:
+                file = request.files['image']
+                if file and file.filename and allowed_file(file.filename):
+                    try:
+                        # Make sure UPLOAD_FOLDER exists
+                        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+                        
+                        # Generate unique filename
+                        filename = secure_filename(file.filename)
+                        unique_filename = f"{uuid.uuid4()}_{filename}"
+                        file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+                        file.save(file_path)
+                        # Save relative path to database
+                        image_path = f"/static/service-images/{unique_filename}"
+                        logger.info(f"Service image saved at: {image_path}")
+                    except Exception as e:
+                        logger.error(f"Error saving image: {str(e)}")
+                        return jsonify({'status': 'error', 'message': f'Error saving image: {str(e)}'}), 500
+
             new_service = Service(
                 name=data['name'],
                 base_price=base_price,
                 description=data['description'],
                 avg_duration=avg_duration,
                 status='active',  # Default to active
+                image_path=image_path,
                 created_at=datetime.utcnow()
             )
             
@@ -460,7 +575,8 @@ def manage_services():
                 'base_price': float(new_service.base_price),
                 'description': new_service.description,
                 'avg_duration': int(new_service.avg_duration),
-                'status': new_service.status
+                'status': new_service.status,
+                'image_path': new_service.image_path
             }), 201
 
     except Exception as e:
@@ -484,18 +600,69 @@ def service_detail(service_id):
         if request.method == 'GET':
             # Return service data directly
             return jsonify({
-                'id': service.id,
+                'id': service.id, 
                 'name': service.name,
                 'base_price': float(service.base_price),
                 'description': service.description,
                 'avg_duration': int(service.avg_duration),
-                'status': service.status
+                'status': service.status,
+                'image_path': service.image_path
             }), 200
 
         elif request.method == 'PUT':
-            data = request.get_json()
-            logger.debug(f"Update service request data: {data}")
+            # Check if multipart form data (file upload)
+            if request.content_type and 'multipart/form-data' in request.content_type:
+                # Handle file upload
+                data = request.form
+                logger.debug(f"Update service request form data: {data}")
+                
+                # Handle image upload if present
+                if 'image' in request.files:
+                    file = request.files['image']
+                    if file and file.filename and allowed_file(file.filename):
+                        try:
+                            # Make sure UPLOAD_FOLDER exists
+                            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+                            
+                            # Delete old image if it exists
+                            if service.image_path:
+                                old_image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                                          service.image_path.lstrip('/'))
+                                if os.path.exists(old_image_path):
+                                    os.remove(old_image_path)
+                                    logger.info(f"Deleted old service image: {old_image_path}")
+                            
+                            # Generate unique filename
+                            filename = secure_filename(file.filename)
+                            unique_filename = f"{uuid.uuid4()}_{filename}"
+                            file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+                            file.save(file_path)
+                            # Save relative path to database
+                            service.image_path = f"/static/service-images/{unique_filename}"
+                            logger.info(f"New service image saved at: {service.image_path}")
+                        except Exception as e:
+                            logger.error(f"Error handling image upload: {str(e)}")
+                            return jsonify({'status': 'error', 'message': f'Error uploading image: {str(e)}'}), 500
+                
+                # Check if image should be removed
+                if data.get('remove_image') == 'true' and service.image_path:
+                    try:
+                        # Delete the image file
+                        image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                              service.image_path.lstrip('/'))
+                        if os.path.exists(image_path):
+                            os.remove(image_path)
+                            logger.info(f"Deleted service image: {image_path}")
+                        # Clear the image path
+                        service.image_path = None
+                    except Exception as e:
+                        logger.error(f"Error removing image: {str(e)}")
+            else:
+                # Handle JSON data
+                data = request.get_json()
+                logger.debug(f"Update service request JSON data: {data}")
             
+            # Update service fields
             if 'name' in data:
                 service.name = data['name']
             if 'base_price' in data:
@@ -506,6 +673,8 @@ def service_detail(service_id):
                 service.avg_duration = int(data['avg_duration'])
             if 'status' in data:
                 service.status = data['status']
+            if 'image_path' in data:
+                service.image_path = data['image_path']
 
             service.updated_at = datetime.utcnow()
             db.session.commit()
@@ -518,7 +687,8 @@ def service_detail(service_id):
                 'base_price': float(service.base_price),
                 'description': service.description,
                 'avg_duration': int(service.avg_duration),
-                'status': service.status
+                'status': service.status,
+                'image_path': service.image_path
             }), 200
 
         elif request.method == 'DELETE':
@@ -538,6 +708,17 @@ def service_detail(service_id):
                     'message': 'Cannot delete service: it has active service requests'
                 }), 422
             
+            # Delete image if exists
+            if service.image_path:
+                try:
+                    image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                              service.image_path.lstrip('/'))
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                        logger.info(f"Deleted service image: {image_path}")
+                except Exception as e:
+                    logger.error(f"Failed to delete service image: {e}")
+            
             # Delete the service
             db.session.delete(service)
             db.session.commit()
@@ -555,10 +736,6 @@ def service_detail(service_id):
             'status': 'error',
             'message': str(e)
         }), 500
-
-#=======================================================================
-# ADMIN ANALYTICS ROUTES
-#=======================================================================
 
 @routes_bp.route('/admin/analytics/revenue', methods=['GET'])
 @jwt_required()
@@ -635,7 +812,7 @@ def get_services_stats():
         service_growth = 0
         if old_services > 0:
             service_growth = ((new_services - old_services) / old_services) * 100
-
+        
         logger.debug(f"Service stats: active={total_active_services}, new this month={new_services}, previous month={old_services}, growth={service_growth}%")
         return jsonify({
             'total_active_services': total_active_services,
@@ -680,7 +857,7 @@ def get_users_stats():
         professional_growth = 0
         if old_professionals > 0:
             professional_growth = ((new_professionals - old_professionals) / old_professionals) * 100
-
+        
         # Customer growth
         new_customers = User.query.filter(
             User.created_at >= current_month,
@@ -696,7 +873,7 @@ def get_users_stats():
         customer_growth = 0
         if old_customers > 0:
             customer_growth = ((new_customers - old_customers) / old_customers) * 100
-
+        
         logger.debug(f"User stats: professionals={total_professionals} (growth={professional_growth}%), customers={total_customers} (growth={customer_growth}%)")
         return jsonify({
             'total_professionals': total_professionals,
@@ -711,18 +888,15 @@ def get_users_stats():
 #=======================================================================
 # PROFESSIONAL ROUTES
 #=======================================================================
-
 @routes_bp.route('/professional/profile', methods=['GET', 'PUT'])
 @professional_required
 def manage_profile():
     """Get or update professional's profile"""
     current_user_id = get_jwt_identity()
     user = User.query.get(current_user_id)
-    
     if request.method == 'GET':
         logger.debug(f"Professional {current_user_id} requesting profile")
         return jsonify(user.to_dict()), 200
-    
     if request.method == 'PUT':
         data = request.get_json()
         logger.debug(f"Professional {current_user_id} updating profile with data: {data}")
@@ -749,18 +923,21 @@ def professional_service_requests():
     current_user_id = get_jwt_identity()
     logger.debug(f"Professional {current_user_id} requesting service requests")
     
-    # Get all open requests (requested) and requests assigned to this professional
-    available_requests = ServiceRequest.query.filter_by(status='requested').all()
-    assigned_requests = ServiceRequest.query.filter_by(
-        pro_id=current_user_id
+    # Get the professional's service type ID
+    professional = ServiceProfessional.query.get(current_user_id)
+    # Get open requests that match the professional's service type
+    # AND are specifically assigned to this professional
+    available_requests = ServiceRequest.query.filter(
+        ServiceRequest.service_id == professional.service_type_id,
+        (ServiceRequest.pro_id == current_user_id)
     ).all()
     
-    logger.debug(f"Found {len(available_requests)} available requests and {len(assigned_requests)} assigned requests")
+    logger.debug(f"Found {len(available_requests)} available requests.")
     
     # Combine and deduplicate
     all_requests = {}
-    for req in available_requests + assigned_requests:
-        if req.id not in all_requests:
+    for req in available_requests:
+        if (req.id not in all_requests):
             all_requests[req.id] = {
                 'id': req.id,
                 'service_id': req.service_id,
@@ -768,9 +945,13 @@ def professional_service_requests():
                 'customer_id': req.customer_id,
                 'customer_name': req.customer.username if req.customer else 'Unknown',
                 'status': req.status,
+                'notes': req.notes if req.notes else None,
                 'request_date': req.request_date.isoformat(),
                 'completion_date': req.completion_date.isoformat() if req.completion_date else None,
-                'is_assigned_to_me': req.pro_id == current_user_id
+                'completed_on': req.completed_on.isoformat() if req.completed_on else None,
+                'assigned_date': req.assigned_date.isoformat() if req.assigned_date else None,
+                'cancelled_on': req.cancelled_on.isoformat() if req.cancelled_on else None,
+                'cancelled_by': req.cancelled_by if req.cancelled_by else None
             }
     
     return jsonify(list(all_requests.values())), 200
@@ -783,7 +964,8 @@ def professional_service_request_detail(request_id):
     logger.debug(f"Professional {current_user_id} accessing request {request_id}")
     
     # Find the service request
-    service_request = ServiceRequest.query.get(request_id)
+    service_request = ServiceRequest.query.filter_by(
+        id=request_id, pro_id=current_user_id).first()
     if not service_request:
         logger.warning(f"Service request {request_id} not found")
         return jsonify({'error': 'Service request not found'}), 404
@@ -798,34 +980,43 @@ def professional_service_request_detail(request_id):
             'customer_id': service_request.customer_id,
             'customer_name': service_request.customer.username if service_request.customer else 'Unknown',
             'status': service_request.status,
+            'customer_address': service_request.customer.address if service_request.customer.address else None,
+            'customer_email': service_request.customer.email if service_request.customer.email else None,
+            'customer_phone_number': service_request.customer.phone_number if service_request.customer.phone_number else None,
             'request_date': service_request.request_date.isoformat(),
             'completion_date': service_request.completion_date.isoformat() if service_request.completion_date else None,
-            'is_assigned_to_me': service_request.pro_id == current_user_id,
-            'notes': service_request.notes
+            'assigned_date': service_request.assigned_date.isoformat() if service_request.assigned_date else None,
+            'completed_on': service_request.completed_on.isoformat() if service_request.completed_on else None,
+            'notes': service_request.notes,
+            'cancelled_on': service_request.cancelled_on.isoformat() if service_request.cancelled_on else None,
+            'cancelled_by': service_request.cancelled_by if service_request.cancelled_by else None
         }), 200
     
     # PUT - Update status (accept, reject, complete)
     if request.method == 'PUT':
         data = request.get_json()
         logger.debug(f"Professional {current_user_id} performing action '{data.get('action')}' on request {request_id}")
+        logger.debug(f"proid {service_request.pro_id} current_user_id {current_user_id}")
         
         action = data.get('action')
-        
         # Handle different actions
-        if action == 'accept' and service_request.status == 'requested':
+        if ((action == 'accept') and (service_request.status == 'requested')):
             service_request.status = 'assigned'
+            service_request.assigned_date = datetime.utcnow()
             service_request.pro_id = current_user_id
             logger.info(f"Professional {current_user_id} accepted request {request_id}")
-        elif action == 'reject' and service_request.pro_id == current_user_id:
-            service_request.status = 'requested'
-            service_request.pro_id = None
-            logger.info(f"Professional {current_user_id} rejected request {request_id}")
-        elif action == 'complete' and service_request.pro_id == current_user_id and service_request.status == 'assigned':
+        elif ((action == 'reject') and (service_request.status == 'assigned')):    
+            service_request.status = 'cancelled'
+            service_request.cancelled_by = 'professional'
+            service_request.cancelled_on = datetime.utcnow()
+            logger.info(f"Professional {current_user_id} cancelled request {request_id}")
+        elif ((action == 'complete') and (service_request.status == 'assigned')):
             service_request.status = 'completed'
-            service_request.completion_date = datetime.utcnow()
+            service_request.completed_on = datetime.utcnow()
             logger.info(f"Professional {current_user_id} completed request {request_id}")
         else:
-            logger.warning(f"Invalid action '{action}' for request {request_id} in status {service_request.status}")
+            # Add more detailed logging for debugging
+            logger.warning(f"Invalid action '{action}' for request {request_id} in status {service_request.status}. pro_id={service_request.pro_id}, current_user_id={current_user_id}")
             return jsonify({'error': 'Invalid action for the current status'}), 400
         
         db.session.commit()
@@ -900,14 +1091,12 @@ def check_professional_status(user_id):
 #=======================================================================
 # CUSTOMER ROUTES
 #=======================================================================
-
 @routes_bp.route('/customer/profile', methods=['GET', 'PUT'])
 @customer_required
 def customer_profile():
     """Get or update a customer's profile"""
     current_user_id = get_jwt_identity()
     user = User.query.get(current_user_id)
-    
     if request.method == 'GET':
         logger.debug(f"Customer {current_user_id} requesting profile")
         return jsonify(user.to_dict()), 200
@@ -926,10 +1115,6 @@ def customer_profile():
             customer = Customer.query.get(current_user_id)
             if customer:
                 customer.address = data['address']
-        if 'pin_code' in data:
-            customer = Customer.query.get(current_user_id)
-            if customer:
-                customer.pin_code = data['pin_code']
         
         db.session.commit()
         logger.info(f"Customer {current_user_id} profile updated")
@@ -953,7 +1138,14 @@ def customer_service_requests():
             'pro_id': req.pro_id,
             'professional_name': req.professional.username if req.professional else None,
             'status': req.status,
+            'notes': req.notes if req.notes else None,
+            'service_price': req.service.base_price,
+            'service_duration': req.service.avg_duration,
             'request_date': req.request_date.isoformat(),
+            'assigned_date': req.assigned_date.isoformat() if req.assigned_date else None,
+            'completed_on': req.completed_on.isoformat() if req.completed_on else None,
+            'cancelled_on': req.cancelled_on.isoformat() if req.cancelled_on else None,
+            'cancelled_by': req.cancelled_by if req.cancelled_by else None,
             'completion_date': req.completion_date.isoformat() if req.completion_date else None
         } for req in requests]), 200
     
@@ -961,7 +1153,9 @@ def customer_service_requests():
     if request.method == 'POST':
         data = request.get_json()
         service_id = data.get('service_id')
-        logger.debug(f"Customer {current_user_id} creating service request for service {service_id}")
+        professional_id = data.get('professional_id')
+        completion_date = data.get('completion_date')
+        logger.debug(f"Customer {current_user_id} creating service request for service {service_id} with professional {professional_id}, completion date: {completion_date}")
         
         # Check if service exists and is active
         service = Service.query.get(service_id)
@@ -980,13 +1174,33 @@ def customer_service_requests():
             customer_id=current_user_id,
             status='requested',
             notes=data.get('notes', ''),
-            request_date=datetime.utcnow()
+            request_date=datetime.utcnow(),
+            completion_date=datetime.fromisoformat(completion_date) if completion_date else None
         )
+        
+        # If a professional was selected, assign the request to that professional
+        # but keep status as 'requested' so they can accept/reject
+        if professional_id:
+            # Validate the professional exists and is approved/active
+            professional = ServiceProfessional.query.filter_by(
+                id=professional_id,
+                is_approved=True,
+                is_active=True
+            ).first()
+            
+            if professional:
+                # Verify the professional handles this service type
+                if professional.service_type_id == service_id:
+                    new_request.pro_id = professional_id
+                    logger.info(f"Request assigned to professional {professional_id} with 'requested' status")
+                else:
+                    logger.warning(f"Professional {professional_id} does not provide service {service_id}")
+            else:
+                logger.warning(f"Selected professional {professional_id} not found or not approved/active")
         
         db.session.add(new_request)
         db.session.commit()
         logger.info(f"Customer {current_user_id} created service request {new_request.id} for service {service_id}")
-        
         return jsonify({
             'message': 'Service request created successfully',
             'request_id': new_request.id
@@ -1018,8 +1232,16 @@ def customer_service_request_detail(request_id):
             'service_name': service_request.service.name if service_request.service else 'Unknown',
             'pro_id': service_request.pro_id,
             'professional_name': service_request.professional.username if service_request.professional else None,
+            'professional_phone': service_request.professional.phone_number if service_request.professional else None,
+            'professional_email': service_request.professional.email if service_request.professional else None,
             'status': service_request.status,
+            'service_price': service_request.service.base_price,
+            'service_duration': service_request.service.avg_duration,
             'request_date': service_request.request_date.isoformat(),
+            'assigned_date': service_request.assigned_date.isoformat() if service_request.assigned_date else None,
+            'completed_on': service_request.completed_on.isoformat() if service_request.completed_on else None,
+            'cancelled_on': service_request.cancelled_on.isoformat() if service_request.cancelled_on else None,
+            'cancelled_by': service_request.cancelled_by if service_request.cancelled_by else None,
             'completion_date': service_request.completion_date.isoformat() if service_request.completion_date else None,
             'notes': service_request.notes
         }), 200
@@ -1029,8 +1251,8 @@ def customer_service_request_detail(request_id):
         data = request.get_json()
         logger.debug(f"Customer {current_user_id} updating request {request_id} with data: {data}")
         
-        # Only allow updates if the status is 'requested' or 'assigned'
-        if service_request.status not in ['requested', 'assigned']:
+        # Only allow updates if the status is 'requested', 'assigned', or 'inprogress'
+        if service_request.status not in ['requested', 'assigned', 'inprogress']:
             logger.warning(f"Cannot modify request {request_id} in status {service_request.status}")
             return jsonify({
                 'error': 'Cannot modify a service request that is already in progress or completed'
@@ -1039,13 +1261,15 @@ def customer_service_request_detail(request_id):
         # Handle cancellation
         if data.get('status') == 'cancelled':
             service_request.status = 'cancelled'
+            service_request.cancelled_on = datetime.utcnow()
+            service_request.cancelled_by = 'customer'
             logger.info(f"Customer {current_user_id} cancelled request {request_id}")
         
         # Update service if provided and status is still 'requested'
         if data.get('service_id') and service_request.status == 'requested':
             service_request.service_id = data.get('service_id')
             logger.info(f"Customer {current_user_id} changed service for request {request_id} to {data.get('service_id')}")
-            
+        
         db.session.commit()
         return jsonify({'message': 'Service request updated successfully'}), 200
 
@@ -1055,7 +1279,6 @@ def customer_service_history():
     """Get service history for a customer including review status"""
     current_user_id = get_jwt_identity()
     logger.debug(f"Customer {current_user_id} requesting service history")
-    
     # Get all service requests for this customer with their review status
     requests = db.session.query(ServiceRequest, Review).\
         outerjoin(Review, Review.request_id == ServiceRequest.id).\
@@ -1125,11 +1348,11 @@ def customer_request_review(request_id):
         if existing_review:
             logger.warning(f"Review already exists for request {request_id}")
             return jsonify({'error': 'A review already exists for this request'}), 400
-                
+        
         data = request.get_json()
         rating = data.get('rating')
         logger.debug(f"Customer {current_user_id} submitting review for request {request_id} with rating {rating}")
-                
+        
         if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
             logger.warning(f"Invalid rating {rating} for review")
             return jsonify({'error': 'Rating must be a number between 1 and 5'}), 400
@@ -1143,11 +1366,11 @@ def customer_request_review(request_id):
                 
         db.session.add(new_review)
         db.session.commit()
-                
+        
         # Update professional's average rating
         professional = ServiceProfessional.query.get(service_request.pro_id)
         if professional:
-            # Calculate new average
+            # Calculate new average:
             new_total_reviews = professional.total_reviews + 1
             new_avg = ((professional.average_rating * professional.total_reviews) + rating) / new_total_reviews
             professional.average_rating = new_avg
@@ -1158,31 +1381,6 @@ def customer_request_review(request_id):
         logger.info(f"Customer {current_user_id} submitted review for request {request_id}")
                                 
         return jsonify({'message': 'Review submitted successfully'}), 201
-
-@routes_bp.route('/customer/service-requests/<int:request_id>/complete', methods=['PUT'])
-@customer_required
-def complete_service_request(request_id):
-    """Mark a service request as completed by the customer"""
-    current_user_id = get_jwt_identity()
-    logger.debug(f"Customer {current_user_id} marking request {request_id} as completed")
-    
-    service_request = ServiceRequest.query.filter_by(
-        id=request_id,
-        customer_id=current_user_id,
-        status='assigned'
-    ).first()
-    
-    if not service_request:
-        logger.warning(f"Service request {request_id} not found or cannot be completed")
-        return jsonify({'error': 'Service request not found or cannot be completed'}), 404
-    
-    # Mark request as completed
-    service_request.status = 'completed'
-    service_request.completion_date = datetime.utcnow()
-    db.session.commit()
-    logger.info(f"Customer {current_user_id} marked request {request_id} as completed")
-    
-    return jsonify({'message': 'Service request marked as completed'}), 200
 
 @routes_bp.route('/customer/service-stats', methods=['GET'])
 @customer_required
@@ -1252,14 +1450,14 @@ def get_services():
     
     services = query.all()
     logger.debug(f"Found {len(services)} services matching criteria")
-    
     return jsonify([{
         'id': service.id,
         'name': service.name,
         'base_price': service.base_price,
         'description': service.description,
         'avg_duration': service.avg_duration,
-        'status': service.status
+        'status': service.status,
+        'image_path': service.image_path
     } for service in services]), 200
 
 @routes_bp.route('/services/available', methods=['GET'])
@@ -1274,7 +1472,8 @@ def get_available_services():
             'name': service.name,
             'description': service.description,
             'base_price': service.base_price,
-            'avg_duration': service.avg_duration
+            'avg_duration': service.avg_duration,
+            'image_path': service.image_path
         } for service in services]), 200
     except Exception as e:
         logger.error(f"Error getting available services: {str(e)}")
@@ -1287,7 +1486,6 @@ def check_service_status():
         logger.debug("Checking service availability status")
         active_services = Service.query.filter_by(status='active').count()
         total_services = Service.query.count()
-        
         logger.debug(f"Service status: {active_services}/{total_services} services active")
         return jsonify({
             'active_services': active_services,
@@ -1300,12 +1498,12 @@ def check_service_status():
 
 @routes_bp.route('/services/search', methods=['GET'])
 def search_services():
-    """Search for services with optional location filter"""
+    """Search services with optional location filter"""
     # Get query parameters for search/filter
     name = request.args.get('name')
     pin_code = request.args.get('pin_code')
     
-    logger.debug(f"Public service search with location: name={name}, pin_code={pin_code}")
+    logger.debug(f"Public service search: name={name}, pin_code={pin_code}")
     
     # Start with base query for services
     query = Service.query.filter_by(status='active')
@@ -1325,10 +1523,9 @@ def search_services():
             professionals = ServiceProfessional.query.filter(
                 ServiceProfessional.service_type_id == service.id,
                 ServiceProfessional.is_approved == True,
-                ServiceProfessional.is_active == True
-            ).join(Customer, Customer.id == ServiceProfessional.id).filter(
-                Customer.pin_code == pin_code
-            ).all()
+                ServiceProfessional.is_active == True,
+                ServiceProfessional.pin_code == pin_code
+                ).all()
             
             if professionals:
                 service_data = {
@@ -1337,6 +1534,7 @@ def search_services():
                     'base_price': service.base_price,
                     'description': service.description,
                     'avg_duration': service.avg_duration,
+                    'image_path': service.image_path,
                     'available_professionals': len(professionals)
                 }
                 result.append(service_data)
@@ -1344,7 +1542,7 @@ def search_services():
         return jsonify(result), 200
     
     # If no pin code, return all active services
-    logger.debug("Returning all active services (no pin code filter)")
+    logger.debug("Returning all active services")
     return jsonify([{
         'id': service.id,
         'name': service.name,
@@ -1380,6 +1578,7 @@ def get_professional_profile(professional_id):
             reviews_list.append({
                 'rating': review.rating,
                 'comment': review.comment,
+                'customer_name': review.request.customer.full_name if review.request.customer else 'Unknown Customer',
                 'created_at': review.created_at.isoformat(),
                 'service_name': request.service.name if request.service else 'Unknown Service'
             })
@@ -1429,10 +1628,44 @@ def get_document_file(document_id):
         }
         mime_type = mime_types.get(file_extension, 'application/octet-stream')
         
-        logger.debug(f"Serving document {document_id} as {mime_type}")
-        # Return the file
-        return send_file(document.file_path, mimetype=mime_type)
-        
+        logger.debug(f"Serving document {document_id} as {mime_type} (inline)")
+        # Return the file with inline content disposition to open in browser
+        response = send_file(document.file_path, mimetype=mime_type, as_attachment=False)
+        response.headers['Content-Disposition'] = f'inline; filename="{document.filename}"'
+        return response
     except Exception as e:
         logger.error(f"Error getting document file {document_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@routes_bp.route('/services/<int:service_id>/professionals', methods=['GET'])
+def get_service_professionals(service_id):
+    """Get professionals available for a specific service"""
+    try:
+        logger.debug(f"Getting professionals for service ID: {service_id}")
+        service = Service.query.get(service_id)
+        
+        if not service:
+            logger.warning(f"Service {service_id} not found")
+            return jsonify({'error': 'Service not found'}), 404
+            
+        # Get all active, approved professionals for this service
+        professionals = ServiceProfessional.query.filter_by(
+            service_type_id=service_id,
+            is_approved=True,
+            is_active=True
+        ).all()
+        
+        logger.debug(f"Found {len(professionals)} professionals for service {service_id}")
+        
+        result = []
+        for pro in professionals:
+            pro_data = pro.to_dict()
+            # Include additional info about the professional's experience
+            pro_data['experience'] = f"{pro.experience_years} years experience" if pro.experience_years else "New Professional"
+            result.append(pro_data)
+            
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting professionals for service {service_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500

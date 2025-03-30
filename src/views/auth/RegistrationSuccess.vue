@@ -22,18 +22,14 @@
                   <p class="mb-0">
                     <i class="bi bi-info-circle me-2"></i>
                     Our team will review your application and verify your documents.
-                    This process typically takes 24-48 hours.
+                    This process typically takes 24-48 hours. Thank you for your patience!
                   </p>
                 </div>
-                
-                <p>
-                  You'll receive an email notification once your account is approved.
-                </p>
               </template>
               
               <template v-else>
                 <p class="lead mb-4">
-                  Your account has been created successfully.
+                  Your account has been created and approved successfully.
                   You can now login to access our services.
                 </p>
               </template>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Activity Report</title>
+    <style>
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .header {
+            text-align: center;
+            color: #4a6bdf;
+        }
+        .content {
+            margin: 20px 0;
+            font-size: 16px;
+            color: #333333;
+        }
+        .summary {
+            list-style: none;
+            padding: 0;
+        }
+        .summary li {
+            margin-bottom: 10px;
+        }
+        .footer {
+            text-align: center;
+            font-size: 13px;
+            color: #666666;
+            margin-top: 20px;
+        }
+        .service-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+        .service-table th, .service-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            font-size: 12px;
+        }
+        .service-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .service-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .service-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        .status-completed {
+            color: green;
+            font-weight: bold;
+        }
+        .status-cancelled {
+            color: red;
+        }
+        .status-requested {
+            color: blue;
+        }
+        .status-assigned {
+            color: orange;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <h1 class="header">HouseCare Monthly Activity Report</h1>
+        <p class="content">
+            Hello {{ customer_name }},
+        </p>
+        <p class="content">
+            Here is a summary of your service requests in <strong>{{ month }}</strong>:
+        </p>
+        <ul class="summary">
+            <li><strong>Total Service Requests:</strong> {{ total_requests }}</li>
+            <li><strong>Completed Requests:</strong> {{ completed_requests }}</li>
+            <li><strong>Pending Requests:</strong> {{ pending_requests }}</li>
+            <li><strong>Accepted Requests:</strong> {{ requested_requests }}</li>
+            <li><strong>Cancelled Requests:</strong> {{ cancelled_requests }}</li>
+        </ul>
+        {% if service_details %}
+        <p class="content">
+            <strong>Service Details:</strong>
+        </p>
+        <table class="service-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Professional</th>
+                    <th>Request Date</th>
+                    <th>Expected Completion</th>
+                    <th>Assigned Date</th>
+                    <th>Completed On</th>
+                    <th>Cancelled</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for detail in service_details %}
+                <tr>
+                    <td>{{ detail.service_name }}</td>
+                    <td class="status-{{ detail.status }}">{{ detail.status|capitalize }}</td>
+                    <td>{{ detail.professional_name }}</td>
+                    <td>{{ detail.request_date }}</td>
+                    <td>{{ detail.completion_date }}</td>
+                    <td>{{ detail.assigned_date }}</td>
+                    <td>{{ detail.completed_on }}</td>
+                    <td>
+                        {% if detail.cancelled_on != "N/A" %}
+                            {{ detail.cancelled_on }} 
+                            {% if detail.cancelled_by != "N/A" %}
+                                (by {{ detail.cancelled_by }})
+                            {% endif %}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="content">
+            No service details available for this month.
+        </p>
+        {% endif %}
+        <p class="content">
+            Thank you for choosing HouseCare. We look forward to serving you!
+        </p>
+        <div class="footer">
+            &copy; {{ current_year | default('2025') }} HouseCare. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>

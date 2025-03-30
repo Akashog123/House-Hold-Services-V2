@@ -1,5 +1,9 @@
 <template>
-    <h3>User Management</h3>
+  <div class="user-management">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 page-header">
+      <h3>User Management</h3>
+    </div>
     
     <!-- Alert for pending approvals -->
     <div v-if="pendingApprovals > 0" class="alert alert-warning mb-4">
@@ -15,113 +19,139 @@
     </div>
     
     <!-- User filter controls -->
-    <div class="filter-controls">
-      <div class="filter-group">
-        <label>Filter by Type:</label>
-        <select v-model="userTypeFilter">
-          <option value="all">All Users</option>
-          <option value="professional">Professionals</option>
-          <option value="customer">Customers</option>
-        </select>
-      </div>
-      
-      <div class="filter-group">
-        <label>Status:</label>
-        <select v-model="userStatusFilter">
-          <option value="all">All</option>
-          <option value="approved">Approved</option>
-          <option value="pending">Pending Approval</option>
-          <option value="blocked">Blocked</option>
-        </select>
-      </div>
-      
-      <div class="filter-group search">
-        <label>Search:</label>
-        <input type="text" v-model="searchQuery" placeholder="Search username..." />
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-bold">Filter by Type:</label>
+            <select v-model="userTypeFilter" class="form-select">
+              <option value="all">All Users</option>
+              <option value="professional">Professionals</option>
+              <option value="customer">Customers</option>
+            </select>
+          </div>
+          
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-bold">Status:</label>
+            <select v-model="userStatusFilter" class="form-select">
+              <option value="all">All</option>
+              <option value="approved">Approved</option>
+              <option value="pending">Pending Approval</option>
+              <option value="blocked">Blocked</option>
+            </select>
+          </div>
+          
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-bold">Search:</label>
+            <input type="text" v-model="searchQuery" placeholder="Search username..." class="form-control" />
+          </div>
+        </div>
       </div>
     </div>
     
     <!-- User List -->
-    <div class="user-table-container">
-      <div v-if="loading" class="loading">Loading users...</div>
-      <div v-if="error" class="error">{{ error }}</div>
-      
-      <table v-if="!loading && !error && filteredUsers.length > 0" class="user-table">
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="user in filteredUsers" :key="user.id" :class="{ 'inactive': !user.is_active }">
-            <td>{{ user.username }}</td>
-            <td>{{ user.email }}</td>
-            <td>{{ user.role }}</td>
-            <td>
-              <span v-if="!user.is_active" class="status blocked">Blocked</span>
-              <span v-else-if="user.is_approved" class="status approved">Approved</span>
-              <span v-else class="status pending">Pending</span>
-            </td>
-            <td>{{ formatDate(user.created_at) }}</td>
-            <td>
-              <div class="action-buttons">
-                <!-- Documents button for professionals -->
-                <button 
-                  v-if="user.role === 'professional'" 
-                  class="btn-info" 
-                  @click="viewDocuments(user.id)"
-                  :disabled="loading || user.documents_count === 0"
-                  title="View Documents"
-                >
-                  <i class="bi bi-file-earmark-text"></i>
-                </button>
-              
-                <!-- Replace approve/reject with View Application button -->
-                <router-link 
-                  v-if="user.role === 'professional' && !user.is_approved" 
-                  class="btn-approve" 
-                  :to="{ path: '/admin/approvals', query: { professional_id: user.id }}"
-                  title="View Application"
-                >
-                  View Application
-                </router-link>
-                
-                <button 
-                    v-if="(user.role === 'professional' || user.role === 'customer') && user.is_approved && user.is_active" 
-                  class="btn-block" 
-                  @click="blockUser(user.id)"
-                >
-                  Block
-                </button>
-                <button 
-                  v-if="!user.is_active" 
-                  class="btn-unblock" 
-                  @click="unblockUser(user.id)"
-                >
-                  Unblock
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      
-      <div v-if="!loading && !error && filteredUsers.length === 0" class="empty-state">
-        No users found matching your filters.
+    <div class="card">
+      <div class="card-body">
+        <div v-if="loading" class="d-flex justify-content-center py-5">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading users...</span>
+          </div>
+        </div>
+        
+        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+        
+        <div class="table-responsive">
+          <table v-if="!loading && !error && filteredUsers.length > 0" class="table table-hover">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="user in filteredUsers" :key="user.id" :class="{ 'table-light': !user.is_active }">
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.role }}</td>
+                <td>
+                  <span v-if="!user.is_active" class="badge bg-danger">Blocked</span>
+                  <span v-else-if="user.is_approved" class="badge bg-success">Approved</span>
+                  <span v-else class="badge bg-info" style="width: 9ch;">Pending</span>
+                </td>
+                <td>{{ formatDate(user.created_at) }}</td>
+                <td>
+                  <div class="d-flex gap-2">
+                    
+                    <button 
+                      v-if="(user.role === 'professional' || user.role === 'customer') && user.is_approved && user.is_active" 
+                      class="btn btn-sm btn-secondary" 
+                      @click="blockUser(user.id)">
+                      Block
+                    </button>
+                    <button 
+                      v-if="!user.is_active && user.is_approved" 
+                      class="btn btn-sm btn-success" 
+                      @click="unblockUser(user.id)">
+                      Unblock
+                    </button>
+
+                    <button 
+                      v-if="user.role === 'professional' && user.is_approved" 
+                      class="btn btn-sm btn-primary" 
+                      @click="viewDocuments(user.id)"
+                      :disabled="loading || user.documents_count === 0"
+                      title="View Documents"
+                    >
+                      <i class="bi bi-file-earmark-text"></i>
+                    </button>
+
+                    <button 
+                      v-if="user.role === 'professional' && user.is_approved"
+                      class="btn btn-sm btn-primary ratings-btn"
+                      :id="`ratings-btn-${user.id}`"
+                      data-bs-toggle="popover"
+                      data-bs-trigger="hover focus"
+                      data-bs-html="true"
+                      data-bs-custom-class="reviews-popover hover-popover"
+                      title="Ratings & Reviews"
+                      data-bs-content="Loading reviews..."
+                      @mouseover="initializeReviewsPopover(user.id)">
+                      <i class="bi bi-star-fill text-warning"></i>
+                    </button>
+
+                    <router-link 
+                      v-if="user.role === 'professional' && !user.is_approved" 
+                      class="btn btn-sm btn-warning"
+                      style="width: 6ch;"
+                      :to="{ path: '/admin/approvals', query: { professional_id: user.id }}"
+                      title="View"
+                    >
+                      View
+                    </router-link>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div v-if="!loading && !error && filteredUsers.length === 0" class="text-center py-5">
+          <i class="bi bi-search fs-2 text-muted mb-3"></i>
+          <p class="text-muted">No users found matching your filters.</p>
+        </div>
       </div>
     </div>
 
     <!-- Documents Modal -->
     <div class="modal fade" id="documentsModal" tabindex="-1" ref="documentsModalRef">
-      <div class="modal-dialog modal-lg">
+      <div class="modal-dialog modal-md">
         <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Professional Documents</h5>
+          <div class="modal-header bg-primary">
+            <h5 class="modal-title text-white">Professional's Documents</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
@@ -152,37 +182,77 @@
                   </span>
                 </div>
                 
-                <div class="document-preview p-2 border rounded">
+                <div class="document-preview p-2 border border-2 border-secondary-subtle rounded">
                   <div class="d-flex justify-content-center my-2">
-                    <a :href="`/api/documents/${doc.id}`" target="_blank" class="btn btn-sm btn-primary">
+                    <button @click="viewDocument(doc.id)" class="btn btn-sm btn-primary">
                       <i class="bi bi-eye me-1"></i> View Document
-                    </a>
-                    <button 
-                      class="btn btn-sm ms-2" 
-                      :class="doc.verified ? 'btn-outline-success' : 'btn-success'" 
-                      @click="toggleVerification(doc.id, !doc.verified)"
-                    >
-                      <i class="bi" :class="doc.verified ? 'bi-x-circle' : 'bi-check-circle'"></i>
-                      {{ doc.verified ? 'Mark as Unverified' : 'Mark as Verified' }}
                     </button>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
         </div>
       </div>
     </div>
+
+    <!-- Hidden templates for popover content -->
+    <div style="display: none;">
+      <div id="reviews-popover-template">
+        <div class="reviews-summary mb-2">
+          <div class="d-flex align-items-center mb-1">
+            <strong class="me-2">Rating:</strong>
+            <div class="ratings-stars">
+              <template v-for="i in 5" :key="i">
+                <i class="bi" :class="i <= Math.round(popoverData.averageRating) ? 'bi-star-fill text-warning' : 'bi-star'"></i>
+              </template>
+            </div>
+            <span class="ms-1">{{ popoverData.averageRating }}/5</span>
+          </div>
+          <div><strong>Total Reviews:</strong> {{ popoverData.totalReviews }}</div>
+        </div>
+        
+        <div v-if="popoverData.reviews.length" class="reviews-list">
+          <hr>
+          <div v-for="(review, index) in popoverData.reviews" :key="index" :class="index > 0 ? 'mt-3' : ''">
+            <div class="d-flex align-items-center">
+              <div class="ratings-stars">
+                <template v-for="i in 5" :key="i">
+                  <i class="bi" :class="i <= review.rating ? 'bi-star-fill text-warning' : 'bi-star'"></i>
+                </template>
+              </div>
+              <small class="ms-1 text-muted">{{ formatReviewDate(review.created_at) }}</small>
+            </div>
+            <div class="review-comment">{{ review.comment || 'No comment provided.' }}</div>
+          </div>
+          
+          <div class="popover-pagination mt-3 d-flex justify-content-between align-items-center">
+            <button class="btn btn-sm btn-outline-secondary" 
+                    :disabled="popoverData.currentPage === 1"
+                    @click="changePopoverPage(popoverData.currentPage - 1)">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <span>Page {{ popoverData.currentPage }} of {{ popoverData.totalPages }}</span>
+            <button class="btn btn-sm btn-outline-secondary" 
+                    :disabled="popoverData.currentPage === popoverData.totalPages"
+                    @click="changePopoverPage(popoverData.currentPage + 1)">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+        <div v-else class="text-center py-2">
+          <p class="mb-0">No reviews found.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import api from '@/services/api.service.js'
-import { Modal } from 'bootstrap'
+import adminService from '@/services/admin.service.js'
+const Modal = window.bootstrap?.Modal
+const Popover = window.bootstrap?.Popover
 
 export default {
   name: 'UserManagementView',
@@ -194,12 +264,21 @@ export default {
       userTypeFilter: 'all',
       userStatusFilter: 'all',
       searchQuery: '',
-      // Document related state
       documents: [],
       loadingDocuments: false,
       documentError: null,
       documentsModalRef: null,
-      documentsModal: null
+      documentsModal: null,
+      popoverData: {
+        averageRating: 0,
+        totalReviews: 0,
+        reviews: [],
+        currentPage: 1,
+        totalPages: 1,
+        professionalId: null
+      },
+      popovers: {},
+      currentProfessionalId: null
     }
   },
   created() {
@@ -335,191 +414,268 @@ export default {
         .replace(/^\w/, c => c.toUpperCase()) // Capitalize first letter
     },
     
-    async toggleVerification(documentId, verified) {
+    async viewDocument(documentId) {
       try {
-        await api.put(`/admin/documents/${documentId}/verify`, { verified })
+        // Instead of directly opening a URL, we need to fetch the document through 
+        // the API service which will include the JWT in the headers
+        const response = await api.get(`/documents/${documentId}`, {
+          responseType: 'blob',
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('auth_token')}` // Ensure JWT is included
+          }
+        });
         
-        // Update the document in the local array
-        const index = this.documents.findIndex(d => d.id === documentId)
-        if (index !== -1) {
-          this.documents[index].verified = verified
-        }
+        // Create a blob URL from the response data
+        const blob = new Blob([response.data], { type: response.headers['content-type'] });
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        // Open the blob URL in a new window
+        window.open(blobUrl, '_blank');
       } catch (err) {
-        console.error('Failed to update document verification:', err)
-        this.documentError = 'Failed to update document: ' + (err.response?.data?.error || err.message)
+        console.error('Failed to view document:', err);
+        alert('Failed to open document: ' + err.message);
       }
+    },
+
+    // Ratings methods
+    initializeReviewsPopover(professionalId) {
+      this.popoverData.professionalId = professionalId;
+      this.popoverData.currentPage = 1;
+      
+      // Create or get the popover instance
+      const btnId = `ratings-btn-${professionalId}`;
+      const btnElement = document.getElementById(btnId);
+      
+      if (!btnElement) return;
+      
+      // Fetch reviews data
+      this.fetchPopoverReviews(professionalId, 1).then(() => {
+        // Update popover content with template
+        const popoverInstance = this.popovers[btnId] || new Popover(btnElement, {
+          container: 'body',
+          html: true,
+          sanitize: false,
+          trigger: 'hover focus',
+          delay: { show: 300, hide: 400 }, // Add delay to prevent accidental hiding
+          content: () => {
+            return this.renderPopoverContent();
+          }
+        });
+        
+        this.popovers[btnId] = popoverInstance;
+        
+        // Force update the popover content if it's already shown
+        if (btnElement.getAttribute('aria-describedby')) {
+          popoverInstance.update();
+        }
+      });
+    },
+    
+    renderPopoverContent() {
+      // Create a temporary element to render the template with Vue bindings
+      const template = document.getElementById('reviews-popover-template');
+      if (!template) return 'Error loading reviews';
+      
+      // Clone the template content
+      const content = template.cloneNode(true);
+      
+      // Replace placeholders with actual data
+      content.innerHTML = content.innerHTML
+        .replace(/{{ popoverData.averageRating }}/g, this.popoverData.averageRating.toFixed(1))
+        .replace(/{{ popoverData.totalReviews }}/g, this.popoverData.totalReviews)
+        .replace(/{{ popoverData.currentPage }}/g, this.popoverData.currentPage)
+        .replace(/{{ popoverData.totalPages }}/g, this.popoverData.totalPages);
+      
+      // Add reviews to the content
+      const reviewsList = content.querySelector('.reviews-list');
+      if (reviewsList && this.popoverData.reviews.length) {
+        let reviewsHtml = '';
+        this.popoverData.reviews.forEach((review, index) => {
+          // Generate stars for ratings
+          let starsHtml = '';
+          for (let i = 1; i <= 5; i++) {
+            starsHtml += `<i class="bi ${i <= review.rating ? 'bi-star-fill text-warning' : 'bi-star'}"></i>`;
+          }
+          
+          reviewsHtml += `
+            <div class="${index > 0 ? 'mt-3' : ''}">
+              <div class="d-flex align-items-center">
+                <div class="ratings-stars">${starsHtml}</div>
+                <small class="ms-1 text-muted">${this.formatReviewDate(review.created_at)}</small>
+              </div>
+              <div class="review-comment">${review.comment || 'No comment provided.'}</div>
+            </div>
+          `;
+        });
+        
+        const reviewsContainer = reviewsList.querySelector('.reviews-list > div');
+        if (reviewsContainer) {
+          reviewsContainer.innerHTML = reviewsHtml;
+        }
+      }
+      
+      // Set up pagination event listeners
+      setTimeout(() => {
+        const prevBtn = document.querySelector('.popover .popover-pagination button:first-child');
+        const nextBtn = document.querySelector('.popover .popover-pagination button:last-child');
+        
+        if (prevBtn) {
+          prevBtn.addEventListener('click', () => this.changePopoverPage(this.popoverData.currentPage - 1));
+        }
+        if (nextBtn) {
+          nextBtn.addEventListener('click', () => this.changePopoverPage(this.popoverData.currentPage + 1));
+        }
+      }, 100);
+      
+      return content.innerHTML;
+    },
+    
+    async fetchPopoverReviews(professionalId, page) {
+      try {
+        const response = await api.get(`/admin/professionals/${professionalId}/reviews`, {
+          params: { page, per_page: 3 } // Show fewer reviews in popover
+        });
+        
+        this.popoverData = {
+          ...this.popoverData,
+          averageRating: response.data.averageRating,
+          totalReviews: response.data.totalReviews,
+          reviews: response.data.reviews,
+          currentPage: page,
+          totalPages: Math.ceil(response.data.totalReviews / 3),
+          professionalId
+        };
+      } catch (err) {
+        console.error('Error fetching reviews for popover:', err);
+        this.popoverData.reviews = [];
+      }
+    },
+    
+    async changePopoverPage(page) {
+      if (page < 1 || page > this.popoverData.totalPages) return;
+      
+      await this.fetchPopoverReviews(this.popoverData.professionalId, page);
+      
+      // Update the active popover if one exists
+      const btnId = `ratings-btn-${this.popoverData.professionalId}`;
+      const popoverInstance = this.popovers[btnId];
+      
+      if (popoverInstance) {
+        // Force update the popover content
+        popoverInstance.setContent({ '.popover-body': this.renderPopoverContent() });
+      }
+    },
+    
+    formatReviewDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    },
+
+    getRatingsSummary(user) {
+      return `${user.average_rating ? user.average_rating.toFixed(1) : 'N/A'}/5 (${user.total_reviews || 0} reviews)`;
     }
   }
 }
 </script>
 
 <style scoped>
-h1 {
-  margin-bottom: 20px;
+.user-management {
+  padding: 1.5rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.page-header h3 {
+  margin-bottom: 0;
   color: #2c3e50;
 }
 
-.filter-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  margin-bottom: 20px;
-  background: #fff;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+.modal-header {
+  background-color: var(--bs-primary);
+  color: white;
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.modal-header .btn-close {
+  filter: brightness(0) invert(1);
 }
 
-.filter-group label {
-  font-weight: bold;
-  font-size: 0.9rem;
+.toast-container {
+  z-index: 9999;
 }
 
-.filter-group select, .filter-group input {
-  padding: 8px 12px;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  min-width: 150px;
+.table tr:hover {
+  background-color: rgba(0, 0, 0, 0.03);
 }
 
-.filter-group.search {
-  flex-grow: 1;
+.reviews-popover {
+  max-width: 300px;
 }
 
-.filter-group.search input {
-  min-width: 200px;
+/* Add hover popover specific styles */
+.hover-popover {
+  pointer-events: auto !important;
 }
 
-.user-table-container {
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  padding: 20px;
-  overflow-x: auto;
+/* Create a hover area to prevent popover from closing immediately */
+:deep(.popover.hover-popover) {
+  pointer-events: auto !important;
 }
 
-.user-table {
-  width: 100%;
-  border-collapse: collapse;
+:deep(.popover.hover-popover:hover) {
+  visibility: visible;
+  opacity: 1;
 }
 
-.user-table th, .user-table td {
-  padding: 12px 15px;
-  text-align: left;
-  border-bottom: 1px solid #eee;
+/* Add a small gap between button and popover for smoother hovering */
+:deep(.popover.hover-popover::before) {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
 }
 
-.user-table th {
-  background-color: #f5f5f5;
-  font-weight: bold;
+.ratings-btn {
+  position: relative;
 }
 
-.user-table tr.inactive {
-  background-color: #f9f9f9;
-  color: #999;
+.ratings-stars {
+  display: inline-flex;
+  align-items: center;
 }
 
-.status {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 4px;
+.ratings-stars .bi {
   font-size: 0.8rem;
-  font-weight: bold;
+  margin-right: 1px;
 }
 
-.status.approved {
-  background-color: #d4edda;
-  color: #155724;
+.review-comment {
+  font-size: 0.875rem;
+  white-space: normal;
+  word-break: break-word;
+  max-height: 60px;
+  overflow-y: auto;
 }
 
-.status.pending {
-  background-color: #fff3cd;
-  color: #856404;
+.popover-pagination .btn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
 }
 
-.status.blocked {
-  background-color: #f8d7da;
-  color: #721c24;
+/* Override Bootstrap's popover styles */
+:deep(.popover) {
+  max-width: 320px;
 }
 
-.action-buttons {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
+:deep(.popover-body) {
+  padding: 0.75rem;
 }
 
-.btn-approve, .btn-reject, .btn-block, .btn-unblock {
-  padding: 5px 10px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-
-.btn-approve {
-  background-color: #28a745;
-  color: white;
-}
-
-.btn-reject {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-block {
-  background-color: #6c757d;
-  color: white;
-}
-
-.btn-unblock {
-  background-color: #17a2b8;
-  color: white;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-  color: #666;
-}
-
-.error {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 10px;
-  border-radius: 4px;
-  margin-bottom: 20px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 30px;
-  color: #666;
-  font-style: italic;
-}
-
-/* Additional styles for document section */
-.btn-info {
-  background-color: #17a2b8;
-  color: white;
-  border: none;
-  padding: 5px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-
-.btn-info:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.document-preview {
-  background-color: #f8f9fa;
+@media (max-width: 768px) {
+  .user-management {
+    padding: 1rem;
+  }
 }
 </style>

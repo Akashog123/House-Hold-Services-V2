@@ -5,6 +5,7 @@ import store from './store'
 import './assets/main.css'
 import './assets/custom-styles.css'
 import api from './services/api.service'
+import AddToDesktop from './components/common/AddToDesktop.vue'
 
 // Import Bootstrap JavaScript
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
@@ -69,6 +70,9 @@ const initApp = async () => {
     app.use(router)
     app.use(store)
     
+    // Register global components
+    app.component('AddToDesktop', AddToDesktop)
+    
     // Make router available globally for programmatic navigation
     window.router = router
     
@@ -82,6 +86,9 @@ const initApp = async () => {
     app.config.globalProperties.$axios = api
     app.use(router)
     app.use(store)
+    
+    // Register global components
+    app.component('AddToDesktop', AddToDesktop)
     
     // Make router available globally for programmatic navigation
     window.router = router

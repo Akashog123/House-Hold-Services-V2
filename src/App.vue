@@ -1,43 +1,51 @@
 <template>
-  <div id="app">
-    <main-layout v-if="!isLoading">
+  <div class="app">
+    <MainLayout v-if="needsMainLayout">
       <router-view />
-    </main-layout>
-    <div v-else class="loading-screen">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
+    </MainLayout>
+    <router-view v-else />
   </div>
 </template>
 
 <script>
-import { computed, onMounted } from 'vue'
-import { useStore } from 'vuex'
-import MainLayout from '@/layouts/MainLayout.vue'
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
+import { useStore } from 'vuex';
+import MainLayout from './layouts/MainLayout.vue';
 
 export default {
   name: 'App',
-  
   components: {
     MainLayout
   },
-  
   setup() {
-    const store = useStore()
-    // Fix: Use auth/loading instead of isAuthenticated
-    const isLoading = computed(() => store.state.auth?.loading || false)
+    const route = useRoute();
+    const store = useStore();
     
-    onMounted(() => {
-      // Initialize pending approvals count if user is admin
-      if (store.getters['auth/isAuthenticated'] && store.getters['auth/user']?.role === 'admin') {
-        store.dispatch('users/fetchPendingApprovalCount');
+    // Determine if we need to wrap the current route in MainLayout
+    const needsMainLayout = computed(() => {
+      const isAuthenticated = store.getters['auth/isAuthenticated'];
+      
+      // Public routes that don't need MainLayout
+      const publicRoutes = ['/login', '/register', '/registration-success', '/forgot-password', '/reset-password'];
+      
+      // Don't apply MainLayout to public routes
+      if (publicRoutes.some(path => route.path.startsWith(path))) {
+        return false;
       }
+      
+      // Home page is special case - only show MainLayout if authenticated
+      if (route.path === '/') {
+        return isAuthenticated;
+      }
+      
+      // Apply MainLayout to all other routes
+      return true;
     });
 
     return {
-      isLoading
-    }
+      needsMainLayout
+    };
   }
 }
 </script>

@@ -11,13 +11,13 @@
       <v-card elevation="0" variant="outlined" rounded="lg" class="loginBox bg-surface">
         <v-card-text class="pa-sm-10 pa-6">
           <div class="d-flex justify-space-between align-center">
-            <h3 class="text-h4 text-center mb-0">Reset Password</h3>
+            <h3 class="text-h4 text-center mb-0">This page is deprecated...</h3>
             <img src="@/assets/logo.png" alt="Logo" class="login-logo" />
           </div>
           
           <div v-if="!submitSuccess">
             <div class="text-body-2 my-4">
-              Enter your email address and we will send you a link to reset your password.
+              This page is deprecated currently.
             </div>
             
             <v-form @submit.prevent="submitForgotPassword" ref="form" class="mt-4 loginForm">

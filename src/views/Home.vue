@@ -1,38 +1,49 @@
 <template>
   <div class="home-page">
     <!-- Hero Section -->
-    <section class="hero-section py-5 bg-primary">
+    <section class="hero-section">
+      <div class="hero-bg">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+      </div>
       <div class="container">
-        <div class="row align-items-center py-4">
-          <div class="col-12 col-md-6">
-            <h1 class="display-4 fw-bold text-white mb-4">
-              Professional Home Services at Your Fingertips
-            </h1>
-            <p class="fs-5 text-white mb-4">
-              Book trusted professionals for cleaning, repairs, maintenance, and more. Quality service guaranteed.
-            </p>
-            <div class="d-flex flex-wrap gap-3">
-              <router-link 
-                to="/register"
-                class="btn btn-light btn-lg text-primary"
-              >
+        <div class="row align-items-center min-vh-75">
+          <div class="col-lg-6 hero-content">
+            <h1 class="hero-title">Professional Home Services at Your Fingertips</h1>
+            <p class="hero-description">Book trusted professionals for cleaning, repairs, maintenance, and more. Quality service guaranteed.</p>
+            <div class="hero-buttons">
+              <router-link to="/register" class="btn btn-primary btn-lg">
                 Get Started
                 <i class="bi bi-arrow-right ms-2"></i>
               </router-link>
-              <router-link 
-                to="/login"
-                class="btn btn-outline-light btn-lg"
-              >
+              <router-link to="/login" class="btn btn-outline-primary btn-lg">
                 Login
                 <i class="bi bi-box-arrow-in-right ms-2"></i>
               </router-link>
-              <router-link 
-                to="/services"
-                class="btn btn-outline-light btn-lg"
-              >
+              <router-link to="/services" class="btn btn-outline-primary btn-lg">
                 Services
-                <i class="bi bi-box-arrow-in-right ms-2"></i>
+                <i class="bi bi-grid ms-2"></i>
               </router-link>
+            </div>
+          </div>
+          <div class="col-lg-6 d-none d-lg-block">
+            <div class="hero-image">
+              <!-- Replace missing SVG with inline SVG or placeholder image -->
+              <div class="hero-illustration">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+                  <circle cx="250" cy="250" r="200" fill="#f0f4ff" />
+                  <path d="M280,350 L350,280 L380,310 L380,350 Z" fill="#4a6bff" />
+                  <rect x="120" y="120" width="200" height="140" rx="10" fill="white" stroke="#4a6bff" stroke-width="4" />
+                  <rect x="150" y="160" width="140" height="10" rx="5" fill="#e6e9f4" />
+                  <rect x="150" y="190" width="140" height="10" rx="5" fill="#e6e9f4" />
+                  <rect x="150" y="220" width="80" height="10" rx="5" fill="#e6e9f4" />
+                  <path d="M200,300 L350,300 L350,350 Q350,360 340,360 L210,360 Q200,360 200,350 Z" fill="white" stroke="#4a6bff" stroke-width="4" />
+                  <circle cx="220" cy="330" r="15" fill="#4a6bff" />
+                  <circle cx="270" cy="330" r="15" fill="#4a6bff" />
+                  <circle cx="320" cy="330" r="15" fill="#4a6bff" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
@@ -40,242 +51,206 @@
     </section>
 
     <!-- Services Section -->
-    <section class="services py-5">
+    <section class="services-section">
       <div class="container">
-        <div class="row">
-          <div class="col-12 text-center mb-5">
-            <h2 class="display-5 fw-bold mb-3">Our Services</h2>
-            <p class="fs-5">Professional services for your home</p>
-          </div>
+        <div class="section-header text-center">
+          <span class="section-subtitle">What We Offer</span>
+          <h2 class="section-title">Our Services</h2>
+          <p class="section-description">Professional services for your home needs</p>
+        </div>
 
-          <!-- Loading Skeleton -->
-          <template v-if="loading.services">
-            <div v-for="n in 3" :key="n" class="col-12 col-md-4 mb-4">
-              <div class="card h-100">
-                <div class="placeholder-glow">
-                  <div class="placeholder w-100" style="height: 200px"></div>
-                </div>
-                <div class="card-body">
-                  <h5 class="card-title placeholder-glow">
-                    <span class="placeholder col-6"></span>
-                  </h5>
-                  <p class="card-text placeholder-glow">
-                    <span class="placeholder col-7"></span>
-                    <span class="placeholder col-4"></span>
-                    <span class="placeholder col-4"></span>
-                  </p>
+        <!-- Loading Skeleton -->
+        <div v-if="loading.services" class="row g-4">
+          <div v-for="n in 6" :key="n" class="col-sm-6 col-md-4 col-lg-3">
+            <div class="service-card-skeleton">
+              <div class="skeleton-img"></div>
+              <div class="skeleton-content">
+                <div class="skeleton-title"></div>
+                <div class="skeleton-text"></div>
+                <div class="skeleton-text short"></div>
+                <div class="skeleton-footer">
+                  <div class="skeleton-price"></div>
+                  <div class="skeleton-button"></div>
                 </div>
               </div>
             </div>
-          </template>
-
-          <!-- Error State -->
-          <div v-else-if="error.services" class="col-12">
-            <div class="alert alert-danger text-center">
-              <i class="bi bi-exclamation-triangle me-2"></i>
-              {{ error.services }}
-            </div>
           </div>
+        </div>
 
-          <!-- Empty State -->
-          <div v-else-if="services.length === 0" class="col-12">
-            <div class="text-center py-5">
-              <div class="empty-state-icon mb-4">
-                <i class="bi bi-clipboard2-x fs-1 text-muted"></i>
-              </div>
-              <h3 class="fs-4 text-muted">No Services Available</h3>
-              <p class="text-muted">Check back later for available services</p>
-            </div>
+        <!-- Error State -->
+        <div v-else-if="error.services" class="error-container">
+          <div class="error-icon">
+            <i class="bi bi-exclamation-triangle"></i>
           </div>
+          <h3 class="error-title">Oops! Something went wrong</h3>
+          <p class="error-message">{{ error.services }}</p>
+        </div>
 
-          <!-- Actual Services -->
-          <template v-else>
-            <div v-for="service in services" :key="service.id" class="col-12 col-md-4 mb-4">
-              <div class="card h-100">
-                <div class="position-relative">
-                  <!-- Image with fallback and loading skeleton -->
-                  <div v-if="!service.imageLoaded" class="placeholder-glow">
-                    <div class="placeholder w-100" style="height: 200px"></div>
-                  </div>
-                  <img 
-                    :src="service.image" 
-                    :alt="service.name"
-                    class="card-img-top"
-                    style="height: 200px; object-fit: cover;"
-                    @load="service.imageLoaded = true"
-                    @error="handleImageError($event, service)"
-                    :class="{ 'd-none': !service.imageLoaded }"
-                  >
-                </div>
-                <div class="card-body">
-                  <h5 class="card-title">{{ service.name }}</h5>
-                  <p class="card-text">{{ service.description }}</p>
-                  <ul class="list-unstyled">
-                    <li v-for="(feature, index) in service.features" :key="index">
-                      <i class="bi bi-check2-circle text-primary me-2"></i>
-                      {{ feature }}
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </template>
+        <!-- Empty State -->
+        <div v-else-if="services.length === 0" class="empty-container">
+          <div class="empty-icon">
+            <i class="bi bi-clipboard2-x"></i>
+          </div>
+          <h3 class="empty-title">No Services Available</h3>
+          <p class="empty-message">Check back later for available services</p>
+        </div>
+
+        <!-- Actual Services -->
+        <div v-else class="row g-4">
+          <div v-for="service in services" :key="service.id" class="col-sm-6 col-md-4 col-lg-3">
+            <HomeServiceCard 
+              :service="service" 
+              @book-service="bookService"
+            />
+          </div>
         </div>
       </div>
     </section>
 
     <!-- How It Works -->
-    <section class="how-it-works py-5 bg-light">
+    <section class="how-it-works-section">
       <div class="container">
-        <div class="row">
-          <div class="col-12 text-center mb-5">
-            <h2 class="display-5 fw-bold mb-3">How It Works</h2>
-            <p class="fs-5">Simple steps to get your home services</p>
-          </div>
+        <div class="section-header text-center">
+          <span class="section-subtitle">Simple Process</span>
+          <h2 class="section-title">How It Works</h2>
+          <p class="section-description">Get your home services in three simple steps</p>
+        </div>
 
-          <div 
-            v-for="(step, index) in steps" 
-            :key="index" 
-            class="col-12 col-md-4"
-          >
-            <div class="text-center p-4">
-              <div class="bg-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-4" 
-                   style="width: 80px; height: 80px;">
-                <i :class="step.icon" class="text-white fs-3"></i>
+        <div class="process-container">
+          <div class="row">
+            <div v-for="(step, index) in steps" :key="index" class="col-md-4">
+              <div class="process-card">
+                <div class="process-number">{{ index + 1 }}</div>
+                <div class="process-icon">
+                  <i :class="step.icon"></i>
+                </div>
+                <h3 class="process-title">{{ step.title }}</h3>
+                <p class="process-description">{{ step.description }}</p>
               </div>
-              <h3 class="fs-4 fw-bold mb-3">{{ step.title }}</h3>
-              <p>{{ step.description }}</p>
             </div>
           </div>
+          <div class="process-line d-none d-md-block"></div>
         </div>
       </div>
     </section>
 
     <!-- Testimonials Section -->
-    <section class="testimonials py-5" v-if="shouldShowTestimonialsSection">
+    <section v-if="shouldShowTestimonialsSection" class="testimonials-section">
       <div class="container">
-        <div class="row">
-          <div class="col-12 text-center mb-5">
-            <h2 class="display-5 fw-bold mb-3">What Our Customers Say</h2>
-            <p class="fs-5">Real feedback from satisfied customers</p>
-          </div>
+        <div class="section-header text-center">
+          <span class="section-subtitle">Client Feedback</span>
+          <h2 class="section-title">What Our Customers Say</h2>
+          <p class="section-description">Real feedback from satisfied customers</p>
+        </div>
 
-          <!-- Loading Skeleton -->
-          <div class="col-12" v-if="loading.testimonials">
-            <div class="testimonial-card mx-auto p-4 bg-white shadow-sm rounded-3" style="max-width: 800px;">
-              <div class="text-center">
-                <div class="placeholder-glow mb-4">
-                  <span class="placeholder rounded-circle" style="width: 80px; height: 80px;"></span>
-                </div>
-                <div class="placeholder-glow mb-4">
-                  <span class="placeholder col-4"></span>
-                </div>
-                <div class="placeholder-glow mb-4">
-                  <span class="placeholder col-8"></span>
-                  <span class="placeholder col-6"></span>
-                  <span class="placeholder col-7"></span>
-                </div>
-                <div class="placeholder-glow">
-                  <span class="placeholder col-4"></span>
-                  <span class="placeholder col-3"></span>
-                </div>
-              </div>
+        <!-- Loading Skeleton -->
+        <div v-if="loading.testimonials" class="testimonial-skeleton">
+          <div class="skeleton-avatar"></div>
+          <div class="skeleton-stars"></div>
+          <div class="skeleton-text"></div>
+          <div class="skeleton-text"></div>
+          <div class="skeleton-name"></div>
+          <div class="skeleton-location"></div>
+        </div>
+
+        <!-- Error State -->
+        <div v-else-if="error.testimonials" class="error-container">
+          <div class="error-icon">
+            <i class="bi bi-exclamation-triangle"></i>
+          </div>
+          <h3 class="error-title">Oops! Something went wrong</h3>
+          <p class="error-message">{{ error.testimonials }}</p>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else-if="testimonials.length === 0" class="empty-container">
+          <div class="empty-icon">
+            <i class="bi bi-chat-square-quote"></i>
+          </div>
+          <h3 class="empty-title">No Testimonials Yet</h3>
+          <p class="empty-message">Be the first to share your experience</p>
+        </div>
+
+        <!-- Actual Testimonials -->
+        <div v-else class="testimonials-slider">
+          <div id="testimonialCarousel" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-indicators">
+              <button 
+                v-for="(_, index) in testimonials" 
+                :key="'indicator-' + index"
+                type="button" 
+                data-bs-target="#testimonialCarousel" 
+                :data-bs-slide-to="index" 
+                :class="{ active: index === 0 }" 
+                :aria-current="index === 0 ? 'true' : 'false'"
+                :aria-label="'Slide ' + (index + 1)"
+              ></button>
             </div>
-          </div>
-
-          <!-- Error State -->
-          <div class="col-12" v-else-if="error.testimonials">
-            <div class="alert alert-danger text-center">
-              <i class="bi bi-exclamation-triangle me-2"></i>
-              {{ error.testimonials }}
-            </div>
-          </div>
-
-          <!-- Empty State -->
-          <div class="col-12" v-else-if="testimonials.length === 0">
-            <div class="text-center py-5">
-              <div class="empty-state-icon mb-4">
-                <i class="bi bi-chat-square-quote fs-1 text-muted"></i>
-              </div>
-              <h3 class="fs-4 text-muted">No Testimonials Yet</h3>
-              <p class="text-muted">Be the first to share your experience</p>
-            </div>
-          </div>
-
-          <!-- Actual Testimonials -->
-          <div class="col-12" v-else>
-            <div id="testimonialCarousel" class="carousel slide" data-bs-ride="carousel">
-              <div class="carousel-inner">
-                <div 
-                  v-for="(testimonial, index) in testimonials" 
-                  :key="testimonial.id"
-                  class="carousel-item"
-                  :class="{ active: index === 0 }"
-                >
-                  <div class="testimonial-card mx-auto p-4 bg-white shadow-sm rounded-3" style="max-width: 800px;">
-                    <div class="text-center">
-                      <!-- Avatar with fallback and loading skeleton -->
-                      <div v-if="!testimonial.avatarLoaded" class="placeholder-glow mb-4">
-                        <span class="placeholder rounded-circle" style="width: 80px; height: 80px;"></span>
-                      </div>
+            
+            <div class="carousel-inner">
+              <div 
+                v-for="(testimonial, index) in testimonials" 
+                :key="testimonial.id"
+                class="carousel-item"
+                :class="{ active: index === 0 }"
+              >
+                <div class="testimonial-card">
+                  <div class="testimonial-content">
+                    <div class="testimonial-quote">
+                      <i class="bi bi-quote"></i>
+                    </div>
+                    <p class="testimonial-text">{{ testimonial.content }}</p>
+                    <div class="testimonial-rating">
+                      <i v-for="n in 5" :key="n"
+                        class="bi"
+                        :class="n <= testimonial.rating ? 'bi-star-fill' : 'bi-star'"
+                      ></i>
+                    </div>
+                  </div>
+                  <div class="testimonial-author">
+                    <div class="testimonial-avatar">
                       <img 
                         :src="testimonial.avatar" 
                         :alt="testimonial.name"
-                        class="rounded-circle mb-4"
-                        style="width: 80px; height: 80px; object-fit: cover;"
-                        @load="testimonial.avatarLoaded = true"
                         @error="handleAvatarError($event, testimonial)"
-                        :class="{ 'd-none': !testimonial.avatarLoaded }"
                       >
-                      <!-- Rest of the testimonial content -->
-                      <div class="mb-4">
-                        <div class="text-warning">
-                          <i v-for="n in 5" :key="n"
-                             class="bi"
-                             :class="n <= testimonial.rating ? 'bi-star-fill' : 'bi-star'"
-                          ></i>
-                        </div>
-                      </div>
-                      <p class="fst-italic mb-4">
-                        "{{ testimonial.content }}"
-                      </p>
-                      <h4 class="fs-5 fw-bold mb-1">{{ testimonial.name }}</h4>
-                      <p class="text-muted">{{ testimonial.location }}</p>
-                      <p class="text-primary small">{{ testimonial.service_name }}</p>
+                    </div>
+                    <div class="testimonial-info">
+                      <h4 class="testimonial-name">{{ testimonial.name }}</h4>
+                      <p class="testimonial-location">{{ testimonial.location }}</p>
+                      <span class="testimonial-service">{{ testimonial.service_name }}</span>
                     </div>
                   </div>
                 </div>
               </div>
-              <button class="carousel-control-prev" type="button" data-bs-target="#testimonialCarousel" data-bs-slide="prev">
-                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                <span class="visually-hidden">Previous</span>
-              </button>
-              <button class="carousel-control-next" type="button" data-bs-target="#testimonialCarousel" data-bs-slide="next">
-                <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                <span class="visually-hidden">Next</span>
-              </button>
             </div>
+            
+            <button class="carousel-control-prev" type="button" data-bs-target="#testimonialCarousel" data-bs-slide="prev">
+              <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+              <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#testimonialCarousel" data-bs-slide="next">
+              <span class="carousel-control-next-icon" aria-hidden="true"></span>
+              <span class="visually-hidden">Next</span>
+            </button>
           </div>
         </div>
       </div>
     </section>
 
     <!-- CTA Section -->
-    <section class="cta-section py-5 bg-primary">
+    <section class="cta-section">
+      <div class="cta-bg">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+      </div>
       <div class="container">
         <div class="row justify-content-center">
-          <div class="col-12 col-md-8 text-center">
-            <h2 class="display-5 fw-bold text-white mb-4">
-              Ready to Transform Your Home?
-            </h2>
-            <p class="fs-5 text-white mb-4">
-              Join thousands of satisfied customers and experience the best in home services.
-            </p>
-            <div class="d-flex justify-content-center gap-3">
-              <router-link
-                to="/register"
-                class="btn btn-light btn-lg text-primary"
-              >
+          <div class="col-lg-8">
+            <div class="cta-content text-center">
+              <h2 class="cta-title">Ready to Transform Your Home?</h2>
+              <p class="cta-description">Join thousands of satisfied customers and experience the best in home services.</p>
+              <router-link to="/register" class="btn btn-light btn-lg">
                 Get Started Today
                 <i class="bi bi-arrow-right ms-2"></i>
               </router-link>
@@ -290,13 +265,20 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
+import { useRouter } from 'vue-router'
 import ServiceService from '@/services/service.service'
+import HomeServiceCard from '@/components/services/HomeServiceCard.vue'
+import placeholderImage from '/PlaceHolder.jpeg'
 
 export default {
   name: 'Home',
+  components: {
+    HomeServiceCard
+  },
 
   setup() {
     const store = useStore()
+    const router = useRouter()
     const services = ref([])
     const testimonials = ref([])
     const loading = ref({
@@ -309,33 +291,51 @@ export default {
     })
 
     const handleImageError = (event, service) => {
-      event.target.src = require('@/assets/images/services/default.jpg')
+      event.target.src = placeholderImage
       service.imageLoaded = true
     }
 
     const handleAvatarError = (event, testimonial) => {
-      event.target.src = require('@/assets/images/testimonials/default.jpg')
+      event.target.src = placeholderImage
       testimonial.avatarLoaded = true
     }
 
     const isAuthenticated = computed(() => store.getters.isAuthenticated)
     const userRole = computed(() => store.getters.currentUser?.role)
 
+    // Add a helper function to get image URLs consistently
+    const getImageUrl = (imagePath) => {
+      if (!imagePath) return '/PlaceHolder.jpeg';
+      
+      // Check if the path is already a full URL
+      if (imagePath.startsWith('http')) {
+        return imagePath;
+      }
+      
+      // Otherwise, prepend the API base URL
+      return `${import.meta.env.VITE_API_URL || ''}${imagePath}`;
+    };
+
     const fetchServices = async () => {
       loading.value.services = true
       error.value.services = null
       try {
         const response = await ServiceService.getAll()
-        services.value = response.data.map(service => ({
+        const processedServices = response.data.map(service => ({
+          ...service,
+          image_path: getImageUrl(service.image_path),
+          price: service.price || service.base_price
+        }))
+        services.value = processedServices.map(service => ({
           id: service.id,
           name: service.name,
           description: service.description,
           base_price: service.base_price,
-          image: service.image_url || require('@/assets/images/services/default.jpg'),
+          image_path: service.image_path,
           imageLoaded: false,
           features: [
-            `Starting at $${service.base_price}`,
-            `${service.avg_duration} mins avg.`,
+            `Starting at ₹${service.base_price}`,
+            `${service.avg_duration} minutes average time taken.`,
             'Professional Service'
           ]
         }))
@@ -352,23 +352,16 @@ export default {
       error.value.testimonials = null
       try {
         const professionals = await ServiceService.getPopular()
-        const reviewPromises = professionals.data
-          .slice(0, 3)
-          .map(pro => ServiceService.getProfessionalProfile(pro.id))
-        
-        const reviewsData = await Promise.all(reviewPromises)
-        
-        testimonials.value = reviewsData
-          .flatMap(response => response.data.reviews)
+        console.log('Fetched professionals:', professionals.data)
+        testimonials.value = professionals.data
           .filter(review => review.comment)
-          .slice(0, 5)
           .map(review => ({
             id: review.id,
             name: review.customer_name || 'Happy Customer',
             location: review.location || 'Verified Customer',
             content: review.comment,
             rating: review.rating,
-            avatar: review.avatar_url || require('@/assets/images/testimonials/default.jpg'),
+            avatar: review.avatar_url || placeholderImage,
             avatarLoaded: false,
             service_name: review.service_name
           }))
@@ -408,6 +401,15 @@ export default {
       return loading.value.testimonials || error.value.testimonials || testimonials.value.length > 0
     })
 
+    const truncateText = (text, length) => {
+      if (!text) return ''
+      return text.length > length ? text.substring(0, length) + '...' : text
+    }
+
+    const bookService = (service) => {
+      router.push(`/book-service?serviceId=${service.id}`)
+    }
+
     return {
       isAuthenticated,
       userRole,
@@ -418,89 +420,703 @@ export default {
       error,
       handleImageError,
       handleAvatarError,
-      shouldShowTestimonialsSection
+      shouldShowTestimonialsSection,
+      truncateText,
+      bookService,
+      getImageUrl  // Make the helper available to the template
     }
   }
 }
 </script>
 
 <style scoped>
+/* Base Styles */
+.section-header {
+  margin-bottom: 3rem;
+}
+
+.section-subtitle {
+  display: inline-block;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 600;
+  color: var(--bs-primary);
+  margin-bottom: 0.75rem;
+}
+
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.section-description {
+  font-size: 1.1rem;
+  color: #666;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* Hero Section */
 .hero-section {
+  position: relative;
+  padding: 6rem 0;
+  overflow: hidden;
+  background-color: #f8f9fa;
+}
+
+.hero-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.shape {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.1;
+}
+
+.hero-section .shape-1 {
+  width: 300px;
+  height: 300px;
+  background: var(--bs-primary);
+  top: -100px;
+  right: -100px;
+}
+
+.hero-section .shape-2 {
+  width: 200px;
+  height: 200px;
+  background: var(--bs-info);
+  top: 50%;
+  left: -100px;
+}
+
+.hero-section .shape-3 {
+  width: 150px;
+  height: 150px;
+  background: var(--bs-success);
+  bottom: -50px;
+  right: 20%;
+}
+
+.min-vh-75 {
+  min-height: 75vh;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.hero-description {
+  font-size: 1.25rem;
+  color: #555;
+  margin-bottom: 2rem;
+  max-width: 600px;
+}
+
+.hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.hero-buttons .btn {
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.hero-buttons .btn-primary {
+  background: linear-gradient(135deg, var(--bs-primary), #4a6bff);
+  border: none;
+}
+
+.hero-buttons .btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+  color: white;
+}
+
+.hero-buttons .btn-outline-primary {
+  color: var(--bs-primary);
+  border-color: var(--bs-primary);
+  background: transparent;
+}
+
+.hero-buttons .btn-outline-primary:hover {
+  background-color: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+.hero-image {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.hero-image img {
+  max-width: 90%;
+  animation: float 6s ease-in-out infinite;
+}
+
+.hero-illustration {
+  max-width: 500px;
+  margin: 0 auto;
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+/* Services Section */
+.services-section {
+  padding: 6rem 0;
+  background-color: #fff;
+}
+
+.service-card-skeleton {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  height: 100%;
+}
+
+.skeleton-img {
+  height: 180px;
+  background: #eee;
+  border-radius: 12px 12px 0 0;
   position: relative;
   overflow: hidden;
 }
 
+.skeleton-img::after,
+.skeleton-title::after,
+.skeleton-text::after,
+.skeleton-price::after,
+.skeleton-button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-content {
+  padding: 1.5rem;
+}
+
+.skeleton-title {
+  height: 20px;
+  background: #eee;
+  margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
+  width: 70%;
+  border-radius: 4px;
+}
+
+.skeleton-text {
+  height: 14px;
+  background: #eee;
+  margin-bottom: 8px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.skeleton-text.short {
+  width: 60%;
+}
+
+.skeleton-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.skeleton-price {
+  height: 16px;
+  width: 60px;
+  background: #eee;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.skeleton-button {
+  height: 36px;
+  width: 80px;
+  background: #eee;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+/* Error and Empty States */
+.error-container,
+.empty-container {
+  text-align: center;
+  padding: 4rem 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.error-icon,
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+  display: inline-block;
+  width: 100px;
+  height: 100px;
+  line-height: 100px;
+  border-radius: 50%;
+}
+
+.error-icon {
+  color: var(--bs-danger);
+  background-color: rgba(var(--bs-danger-rgb), 0.1);
+}
+
+.empty-icon {
+  color: var(--bs-secondary);
+  background-color: rgba(var(--bs-secondary-rgb), 0.1);
+}
+
+.error-title,
+.empty-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.error-message,
+.empty-message {
+  color: #666;
+}
+
+/* How It Works Section */
+.how-it-works-section {
+  padding: 6rem 0;
+  background-color: #f8f9fa;
+  position: relative;
+}
+
+.process-container {
+  position: relative;
+  padding: 3rem 0 1rem;
+}
+
+.process-line {
+  position: absolute;
+  top: 100px;
+  left: 20%;
+  right: 20%;
+  height: 3px;
+  background: linear-gradient(90deg, var(--bs-primary), var(--bs-info));
+  z-index: 1;
+}
+
+.process-card {
+  position: relative;
+  z-index: 2;
+  background: #fff;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  height: 100%;
+}
+
+.process-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+}
+
+.process-number {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  background: var(--bs-primary);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 50%;
+  line-height: 40px;
+  font-size: 1.25rem;
+}
+
+.process-icon {
+  font-size: 2.5rem;
+  color: var(--bs-primary);
+  margin-bottom: 1.5rem;
+  height: 100px;
+  width: 100px;
+  line-height: 100px;
+  background-color: rgba(var(--bs-primary-rgb), 0.1);
+  border-radius: 50%;
+  margin: 0 auto 1.5rem;
+}
+
+.process-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.process-description {
+  color: #666;
+}
+
+/* Testimonials Section */
+.testimonials-section {
+  padding: 6rem 0;
+  background-color: #fff;
+}
+
+.testimonial-skeleton {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.skeleton-avatar {
+  width: 80px;
+  height: 80px;
+  background: #eee;
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-avatar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-stars {
+  height: 20px;
+  width: 120px;
+  background: #eee;
+  margin: 0 auto 1.5rem;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.skeleton-stars::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+.testimonials-slider {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
 .testimonial-card {
-  transition: transform 0.3s ease;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  padding: 2rem;
+  margin: 1rem;
+}
+
+.testimonial-content {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.testimonial-quote {
+  font-size: 2rem;
+  color: rgba(var(--bs-primary-rgb), 0.2);
+  margin-bottom: 1rem;
+}
+
+.testimonial-text {
+  font-size: 1.1rem;
+  color: #555;
+  font-style: italic;
+  margin-bottom: 1.5rem;
+}
+
+.testimonial-rating {
+  color: #ffc107;
+  font-size: 1.2rem;
+}
+
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.testimonial-avatar {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 1rem;
+  border: 3px solid rgba(var(--bs-primary-rgb), 0.2);
+}
+
+.testimonial-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.testimonial-info {
+  text-align: left;
+}
+
+.testimonial-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.testimonial-location {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.testimonial-service {
+  color: var(--bs-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.carousel-indicators {
+  bottom: -40px;
+}
+
+.carousel-indicators button {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin: 0 5px;
+  background-color: rgba(var(--bs-primary-rgb), 0.3);
+}
+
+.carousel-indicators button.active {
+  background-color: var(--bs-primary);
 }
 
 .carousel-control-prev,
 .carousel-control-next {
-  width: 5%;
-}
-
-.carousel-control-prev-icon,
-.carousel-control-next-icon {
-  background-color: rgba(0, 0, 0, 0.5);
+  width: 40px;
+  height: 40px;
+  background-color: var(--bs-primary);
   border-radius: 50%;
-  padding: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.7;
 }
 
-/* Add styles for placeholder animations */
-.placeholder-glow .placeholder {
-  animation: placeholder-wave 2s linear infinite;
-  background-color: rgba(var(--bs-primary-rgb), 0.1);
+.carousel-control-prev {
+  left: -20px;
 }
 
-/* Fade transition for content */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
+.carousel-control-next {
+  right: -20px;
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+.carousel-control-prev:hover,
+.carousel-control-next:hover {
+  opacity: 1;
 }
 
-.empty-state-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f8f9fa;
-  border-radius: 50%;
+/* CTA Section */
+.cta-section {
+  padding: 6rem 0;
+  background: linear-gradient(135deg, var(--bs-primary), #4a6bff);
+  position: relative;
+  overflow: hidden;
 }
 
-.empty-state-icon i {
-  opacity: 0.5;
+.cta-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
-@media (max-width: 768px) {
-  .display-4 {
+.cta-section .shape-1 {
+  width: 300px;
+  height: 300px;
+  background: rgba(255, 255, 255, 0.1);
+  top: -100px;
+  right: -100px;
+}
+
+.cta-section .shape-2 {
+  width: 200px;
+  height: 200px;
+  background: rgba(255, 255, 255, 0.1);
+  bottom: -100px;
+  left: -50px;
+}
+
+.cta-content {
+  position: relative;
+  z-index: 1;
+}
+
+.cta-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 1rem;
+}
+
+.cta-description {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+}
+
+.cta-section .btn {
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.cta-section .btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+  .hero-title {
     font-size: 2.5rem;
   }
   
-  .display-5 {
+  .section-title {
     font-size: 2rem;
   }
   
-  .hero-section {
-    padding: 2rem 0;
+  .process-line {
+    display: none;
+  }
+  
+  .process-card {
+    margin-bottom: 2rem;
   }
 }
 
-/* Responsive adjustments for button group */
-@media (max-width: 576px) {
-  .gap-3 {
-    gap: 0.5rem !important;
+@media (max-width: 767px) {
+  .hero-section,
+  .services-section,
+  .how-it-works-section,
+  .testimonials-section,
+  .cta-section {
+    padding: 4rem 0;
   }
   
-  .btn-lg {
-    padding: 0.5rem 1rem;
+  .hero-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .hero-buttons .btn {
+    width: 100%;
+  }
+  
+  .carousel-control-prev,
+  .carousel-control-next {
+    display: none;
+  }
+  
+  .process-card {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .hero-title {
+    font-size: 2rem;
+  }
+  
+  .hero-description {
     font-size: 1rem;
+  }
+  
+  .section-title {
+    font-size: 1.75rem;
+  }
+  
+  .section-description {
+    font-size: 1rem;
+  }
+  
+  .cta-title {
+    font-size: 1.75rem;
   }
 }
 </style>

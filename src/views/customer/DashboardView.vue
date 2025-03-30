@@ -1,169 +1,152 @@
 <template>
-  <CustomerLayout>
-    <div class="customer-dashboard">
-      <h1>Customer Dashboard</h1>
-      
-      <div class="dashboard-section service-request-section">
-        <h2>My Service Requests</h2>
-        
-        <div v-if="loading" class="loading">Loading your service requests...</div>
-        <div v-if="error" class="error-message">{{ error }}</div>
-        
-        <div class="action-bar">
-          <button @click="showCreateRequestModal = true" class="btn btn-primary">
-            <v-icon start>mdi-plus</v-icon>
-            New Service Request
-          </button>
+  <div class="dashboard-wrapper">
+    <!-- Page Header -->
+    <div class="row mb-4">
+      <div class="col-12 d-flex justify-content-between align-items-center">
+        <h3>Customer Dashboard</h3>
+        <div>
+          <router-link to="/services" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-2"></i> Book a Service
+          </router-link>
         </div>
-        
-        <table v-if="serviceRequests.length > 0" class="service-request-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Service</th>
-              <th>Date Requested</th>
-              <th>Professional</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="request in serviceRequests" :key="request.id" 
-                :class="{ 'completed': request.status === 'completed', 
-                         'cancelled': request.status === 'cancelled' }">
-              <td>#{{ request.id }}</td>
-              <td>{{ request.service_name }}</td>
-              <td>{{ formatDate(request.request_date) }}</td>
-              <td>{{ request.professional_name || 'Not assigned' }}</td>
-              <td>
-                <span class="status-badge" :class="request.status">
-                  {{ formatStatus(request.status) }}
-                </span>
-              </td>
-              <td>
-                <div class="action-buttons">
-                  <button v-if="request.status === 'requested'"
-                          @click="cancelRequest(request.id)" 
-                          class="btn btn-danger btn-sm">
-                    Cancel
-                  </button>
-                  <button @click="viewRequestDetails(request.id)" 
-                          class="btn btn-info btn-sm">
-                    View
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        
-        <div v-else-if="!loading" class="empty-state">
-          You don't have any service requests yet. Create one to get started!
+      </div>
+    </div>
+
+    <!-- Error Message -->
+    <div v-if="error" class="row mb-4">
+      <div class="col-12">
+        <div class="alert alert-danger" role="alert">
+          {{ error }}
+        </div>
+      </div>
+    </div>
+    
+    <!-- Stats Overview -->
+    <div class="row g-4 mb-4">
+      <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card h-100 stat-card">
+          <div class="card-body d-flex flex-column align-items-center text-center">
+            <div class="d-flex align-items-center mb-3">
+              <div class="icon-wrapper bg-warning bg-opacity-10 rounded-circle p-3 me-2">
+                <i class="bi bi-hourglass-split fs-4 text-warning"></i>
+              </div>
+              <h5 class="card-subtitle text-muted mb-0">Requested</h5>
+            </div>
+            <h3 class="card-title mb-0">{{ requestedServices.length }}</h3>
+          </div>
         </div>
       </div>
       
-      <!-- Create Service Request Modal -->
-      <v-dialog v-model="showCreateRequestModal" max-width="600px">
-        <v-card>
-          <v-card-title>Create New Service Request</v-card-title>
-          <v-card-text>
-            <div v-if="createRequestError" class="error-message">
-              {{ createRequestError }}
+      <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card h-100 stat-card">
+          <div class="card-body d-flex flex-column align-items-center text-center">
+            <div class="d-flex align-items-center mb-3">
+              <div class="icon-wrapper bg-secondary bg-opacity-10 rounded-circle p-3 me-2">
+                <i class="bi bi-gear-wide-connected fs-4 text-primary"></i>
+              </div>
+              <h5 class="card-subtitle text-muted mb-0">In Progress</h5>
+            </div>
+            <h3 class="card-title mb-0">{{ inProgressServices.length }}</h3>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card h-100 stat-card">
+          <div class="card-body d-flex flex-column align-items-center text-center">
+            <div class="d-flex align-items-center mb-3">
+              <div class="icon-wrapper bg-success bg-opacity-10 rounded-circle p-3 me-2">
+                <i class="bi bi-check-circle fs-4 text-success"></i>
+              </div>
+              <h5 class="card-subtitle text-muted mb-0">Completed</h5>
+            </div>
+            <h3 class="card-title mb-0">{{ completedServices.length }}</h3>
+          </div>
+        </div>
+      </div>   
+      
+      <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card h-100 stat-card">
+          <div class="card-body d-flex flex-column align-items-center text-center">
+            <div class="d-flex align-items-center mb-3">
+              <div class="icon-wrapper bg-danger bg-opacity-10 rounded-circle p-3 me-2">
+                <i class="bi bi-x-circle fs-4 text-danger"></i>
+              </div>
+              <h5 class="card-subtitle text-muted mb-0">Cancelled</h5>
+            </div>
+            <h3 class="card-title mb-0">{{ cancelledServices.length }}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Recent Bookings Section -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Recent Bookings</h5>
+          </div>
+          <div class="card-body">
+            <div v-if="loading" class="text-center py-3">
+              <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading service requests...</p>
             </div>
             
-            <v-form @submit.prevent="createServiceRequest">
-              <v-select
-                v-model="newRequest.service_id"
-                :items="availableServices"
-                item-title="name"
-                item-value="id"
-                label="Select Service"
-                required
-              ></v-select>
-              
-              <v-textarea
-                v-model="newRequest.notes"
-                label="Additional Notes (optional)"
-                rows="3"
-              ></v-textarea>
-            </v-form>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn color="grey-darken-1" variant="text" @click="showCreateRequestModal = false">
-              Cancel
-            </v-btn>
-            <v-btn 
-              color="primary" 
-              variant="elevated" 
-              @click="createServiceRequest"
-              :loading="creatingRequest"
-            >
-              Submit Request
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
-      
-      <!-- Request Details Modal -->
-      <v-dialog v-model="showRequestDetailsModal" max-width="700px">
-        <v-card v-if="selectedRequest">
-          <v-card-title>Service Request #{{ selectedRequest.id }}</v-card-title>
-          <v-card-text>
-            <div class="request-details">
-              <div class="detail-row">
-                <span class="detail-label">Service:</span>
-                <span class="detail-value">{{ selectedRequest.service_name }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Status:</span>
-                <span class="detail-value status-badge" :class="selectedRequest.status">
-                  {{ formatStatus(selectedRequest.status) }}
-                </span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Date Requested:</span>
-                <span class="detail-value">{{ formatDate(selectedRequest.request_date) }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Professional:</span>
-                <span class="detail-value">{{ selectedRequest.professional_name || 'Not assigned yet' }}</span>
-              </div>
-              <div class="detail-row" v-if="selectedRequest.completion_date">
-                <span class="detail-label">Completed on:</span>
-                <span class="detail-value">{{ formatDate(selectedRequest.completion_date) }}</span>
-              </div>
+            <div class="table-responsive">
+              <table v-if="recentBookings.length > 0" class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Booking Date</th>
+                    <th>Completion Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="request in recentBookings" :key="request.id">
+                    <td>{{ request.service_name }}</td>
+                    <td>
+                      {{ formatDate(request.request_date) }}
+                    </td>
+                    <td>
+                      {{ formatDate(request.completion_date) }}
+                    </td>
+                    <td>
+                      <span class="status-badge" :class="request.status">
+                        {{ formatStatus(request.status) }}
+                      </span>
+                    </td>
+                    <td>
+                      <router-link :to="`/customer/bookings?id=${request.id}`" class="btn btn-sm btn-primary">
+                        Details
+                      </router-link>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn 
-              v-if="selectedRequest.status === 'requested'"
-              color="error" 
-              variant="text" 
-              @click="confirmCancel"
-            >
-              Cancel Request
-            </v-btn>
-            <v-btn color="primary" variant="text" @click="showRequestDetailsModal = false">
-              Close
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+            
+            <div v-if="!loading && recentBookings.length === 0" class="text-center py-3">
+              <p class="text-muted mb-0">You don't have any bookings yet.</p>
+              <router-link to="/services" class="btn btn-primary mt-3">
+                Book Your First Service
+              </router-link>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </CustomerLayout>
+  </div>
 </template>
 
 <script>
 import api from '../../services/api.service';
-import CustomerLayout from '@/layouts/CustomerLayout.vue';
-
 export default {
   name: 'CustomerDashboard',
-  components: {
-    CustomerLayout
-  },
   data() {
     return {
       serviceRequests: [],
@@ -172,7 +155,6 @@ export default {
       error: null,
       showCreateRequestModal: false,
       showRequestDetailsModal: false,
-      selectedRequestId: null,
       selectedRequest: null,
       createRequestError: null,
       creatingRequest: false,
@@ -181,6 +163,26 @@ export default {
         notes: ''
       }
     };
+  },
+  computed: {
+    requestedServices() {
+      return this.serviceRequests.filter(req => req.status === 'requested');
+    },
+    inProgressServices() {
+      return this.serviceRequests.filter(req => req.status === 'assigned');
+    },
+    completedServices() {
+      return this.serviceRequests.filter(req => req.status === 'completed');
+    },
+    cancelledServices() {
+      return this.serviceRequests.filter(req => req.status === 'cancelled');
+    },
+    recentBookings() {
+      // Return the 5 most recent bookings
+      return [...this.serviceRequests]
+        .sort((a, b) => new Date(b.request_date) - new Date(a.request_date))
+        .slice(0, 4);
+    }
   },
   created() {
     this.fetchServiceRequests();
@@ -213,7 +215,7 @@ export default {
     formatDate(dateStr) {
       if (!dateStr) return 'N/A';
       const date = new Date(dateStr);
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      return date.toLocaleDateString();
     },
     
     formatStatus(status) {
@@ -224,126 +226,37 @@ export default {
         'cancelled': 'Cancelled'
       };
       return statusMap[status] || status;
-    },
-    
-    async createServiceRequest() {
-      if (!this.newRequest.service_id) {
-        this.createRequestError = 'Please select a service';
-        return;
-      }
-      
-      this.creatingRequest = true;
-      this.createRequestError = null;
-      
-      try {
-        await api.post('/customer/service-requests', this.newRequest);
-        this.showCreateRequestModal = false;
-        this.newRequest = { service_id: null, notes: '' };
-        await this.fetchServiceRequests();
-      } catch (err) {
-        this.createRequestError = 'Failed to create service request: ' + 
-                                 (err.response?.data?.error || err.message);
-      } finally {
-        this.creatingRequest = false;
-      }
-    },
-    
-    async viewRequestDetails(requestId) {
-      try {
-        const response = await api.get(`/customer/service-requests/${requestId}`);
-        this.selectedRequest = response.data;
-        this.showRequestDetailsModal = true;
-      } catch (err) {
-        console.error('Failed to fetch request details:', err);
-      }
-    },
-    
-    async cancelRequest(requestId) {
-      if (confirm('Are you sure you want to cancel this service request?')) {
-        try {
-          await api.put(`/customer/service-requests/${requestId}`, {
-            status: 'cancelled'
-          });
-          await this.fetchServiceRequests();
-        } catch (err) {
-          this.error = 'Failed to cancel request: ' + (err.response?.data?.error || err.message);
-        }
-      }
-    },
-    
-    confirmCancel() {
-      if (confirm('Are you sure you want to cancel this service request?')) {
-        this.cancelRequest(this.selectedRequest.id);
-        this.showRequestDetailsModal = false;
-      }
     }
   }
 };
 </script>
 
 <style scoped>
-.customer-dashboard {
-  padding: 20px;
+.dashboard-wrapper {
+  padding: 1.5rem;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
-h1 {
-  color: #2c3e50;
-  margin-bottom: 20px;
+.stat-card {
+  transition: transform 0.2s ease-in-out;
+  border: none;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
 }
 
-.dashboard-section {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  padding: 20px;
-  margin-bottom: 30px;
+.stat-card:hover {
+  transform: translateY(-4px);
 }
 
-.action-bar {
-  margin-bottom: 20px;
-}
-
-.btn-primary {
-  background-color: var(--primary);
-  border-color: var(--primary);
-  color: white;
-  padding: 10px 15px;
-  border-radius: 4px;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
+.icon-wrapper {
+  width: 48px;
+  height: 48px;
+  display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
 }
 
-.btn-primary:hover {
-  background-color: var(--primary-light);
-  border-color: var(--primary-light);
-}
-
-.btn-primary:hover {
-  background-color: var(--primary-light);
-  border-color: var(--primary-light);
-}
-
-.service-request-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-}
-
-.service-request-table th,
-.service-request-table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.service-request-table th {
-  background-color: #f5f5f5;
-  font-weight: 600;
-}
-
+/* Status badge styles */
 .status-badge {
   display: inline-block;
   padding: 4px 8px;
@@ -372,77 +285,14 @@ h1 {
   color: #721c24;
 }
 
-tr.completed {
-  background-color: #f8f9fa;
-  color: #6c757d;
-}
-
-tr.cancelled {
-  background-color: #f9f9f9;
-  color: #999;
-  text-decoration: line-through;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 5px;
-}
-
-.btn-sm {
-  padding: 3px 10px;
-  font-size: 0.8rem;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.btn-info {
-  background-color: #17a2b8;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-  color: #666;
-}
-
-.error-message {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 10px;
-  border-radius: 4px;
-  margin-bottom: 15px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 30px;
-  color: #666;
-  font-style: italic;
-}
-
-.request-details {
-  display: grid;
-  gap: 10px;
-}
-
-.detail-row {
-  display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 10px;
-}
-
-.detail-label {
-  font-weight: bold;
-  color: #6c757d;
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dashboard-wrapper {
+    padding: 1rem;
+  }
+  
+  .card-title {
+    font-size: 1.25rem;
+  }
 }
 </style>

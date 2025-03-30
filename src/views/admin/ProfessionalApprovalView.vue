@@ -83,22 +83,42 @@
                 >
                   <i class="bi bi-file-earmark-text me-1"></i> View Documents
                 </button>
-                <button 
-                  class="btn btn-success mb-2 w-100" 
-                  @click="approveProfessional(professional.id)"
-                  :disabled="processingSingleRequest === professional.id || !isProfessionalApprovalReady(professional)"
-                  :title="!isProfessionalApprovalReady(professional) ? 'All documents must be verified before approval' : ''"
-                >
-                  <span v-if="processingSingleRequest === professional.id" class="spinner-border spinner-border-sm me-1"></span>
-                  <i v-else class="bi bi-check-circle me-1"></i> Approve
-                </button>
-                <button 
-                  class="btn btn-danger w-100" 
-                  @click="openRejectModal(professional)"
-                  :disabled="processingSingleRequest === professional.id"
-                >
-                  <i class="bi bi-x-circle me-1"></i> Reject
-                </button>
+              <button 
+                class="btn btn-success mb-2 w-100" 
+                @click="approveProfessional(professional.id)"
+                :disabled="processingSingleRequest === professional.id || !isProfessionalApprovalReady(professional)"
+                :title="!isProfessionalApprovalReady(professional) ? 'All documents must be verified before approval' : ''"
+              >
+                <span v-if="processingSingleRequest === professional.id" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="bi bi-check-circle me-1"></i> Approve
+              </button>
+              <button 
+                class="btn btn-danger w-100 mb-2" 
+                @click="openRejectModal(professional)"
+                :disabled="processingSingleRequest === professional.id"
+              >
+                <i class="bi bi-x-circle me-1"></i> Reject
+              </button>
+              
+              <!-- Verification status indicator -->
+              <div class="verification-status mt-2 text-center">
+                <small v-if="isProfessionalApprovalReady(professional)" class="text-success">
+                  <i class="bi bi-check-circle-fill me-1"></i> All documents verified
+                </small>
+                <small v-else class="text-warning">
+                  <i class="bi bi-exclamation-circle-fill me-1"></i> Verification required
+                </small>
+                
+                <!-- Document verification status details -->
+                <div class="document-status-details mt-1" v-if="professional.documents_status">
+                  <div class="d-flex flex-column small">
+                    <span v-for="(verified, docType) in professional.documents_status" :key="docType"
+                         :class="verified ? 'text-success' : 'text-muted'">
+                      <i class="bi" :class="verified ? 'bi-check-circle-fill' : 'bi-circle'"></i>
+                      {{ formatDocumentType(docType) }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -107,11 +127,12 @@
     </div>
     
     <!-- Documents Modal -->
-    <div class="modal fade" id="documentsModal" tabindex="-1" ref="documentsModalRef">
-      <div class="modal-dialog modal-lg">
+    <div>
+    <div class="modal" id="documentsModal" tabindex="-1" ref="documentsModalRef">
+      <div class="modal-dialog modal-md">
         <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Professional Documents</h5>
+          <div class="modal-header bg-primary">
+            <h5 class="modal-title text-white">Professional's Documents</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
@@ -140,44 +161,36 @@
                   <span class="text-muted small">Uploaded: {{ formatDate(doc.uploaded_at) }}</span>
                 </div>
                 
-                <div class="document-preview p-2 border rounded">
-                  <!-- Show image preview if it's an image file -->
-                  <img 
-                    v-if="isImageFile(doc.filename)"
-                    :src="getDocumentUrl(doc)"
-                    class="img-fluid mb-2 mx-auto d-block"
-                    style="max-height: 300px;"
-                    alt="Document Preview"
-                  />
-                  
-                  <!-- Show PDF or other file info -->
-                  <div v-else class="text-center py-3">
-                    <i class="bi bi-file-earmark-pdf display-4 text-danger"></i>
-                    <p class="mb-0 mt-2">{{ doc.filename }}</p>
+                <div class="d-flex align-items-center justify-content-between">
+                  <!-- Left column: Icon and filename -->
+                  <div class="document-info d-flex align-items-center">
+                    <i class="bi bi-file-earmark text-danger me-3" style="font-size: 2rem;"></i>
+                    <p class="mb-0">{{ doc.filename }}</p>
                   </div>
                   
-                  <div class="d-flex justify-content-center my-2">
-                    <button class="btn btn-sm btn-primary" @click="openDocument(doc)">
-                      <i class="bi bi-eye me-1"></i> View Full Document
+                  <!-- Right column: Action buttons -->
+                  <div class="document-actions">
+                    <button class="btn btn-sm btn-primary me-2" @click="openDocument(doc.id)">
+                      <i class="bi bi-eye me-1"></i> View
                     </button>
                     <button 
-                      class="btn btn-sm ms-2"
+                      class="btn btn-sm"
                       :class="doc.verified ? 'btn-success' : 'btn-outline-success'"
                       @click="toggleVerification(doc)"
+                      :disabled="verifyingDocId === doc.id"
                     >
-                      <i class="bi" :class="doc.verified ? 'bi-check-circle-fill' : 'bi-check-circle'"></i>
-                      {{ doc.verified ? 'Verified' : 'Mark as Verified' }}
+                      <span v-if="verifyingDocId === doc.id" class="spinner-border spinner-border-sm me-1"></span>
+                      <i v-else class="bi" :class="doc.verified ? 'bi-check-circle-fill' : 'bi-check-circle'"></i>
+                      {{ doc.verified ? 'Verified' : 'Verify' }}
                     </button>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
         </div>
       </div>
+    </div>
     </div>
     
     <!-- Reject Modal -->
@@ -197,7 +210,7 @@
                 class="form-control" 
                 id="rejectionReason" 
                 rows="3"
-                placeholder="Example: Incomplete documentation, qualification mismatch, etc."
+                placeholder="Enter reason for rejection (optional)"
               ></textarea>
             </div>
           </div>
@@ -232,6 +245,7 @@
           </div>
           <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
+        </div>
       </div>
     </div>
   </div>
@@ -258,7 +272,7 @@ export default {
     const processingSingleRequest = ref(null);
     const rejectionReason = ref('');
     const successMessage = ref('');
-    
+    const verifyingDocId = ref(null);
     // Router
     const route = useRoute();
     const router = useRouter();
@@ -313,6 +327,9 @@ export default {
           
           const professional = response.data.find(p => p.id == professionalId);
           if (professional) {
+            // Log the verification status for debugging
+            console.log("Professional verification status:", professional.documents_verified);
+            console.log("Professional documents status:", professional.documents_status);
             pendingProfessionals.value = [professional];
           } else {
             error.value = 'The specified professional was not found or does not require approval.';
@@ -361,66 +378,152 @@ export default {
       }
     };
     
-    const openDocument = (document) => {
-      // Open document in a new tab
-      const documentUrl = getDocumentUrl(document);
-      window.open(documentUrl, '_blank');
-    };
-    
-    const getDocumentUrl = (document) => {
-      // In a real application, this would be a URL to the document
-      // For now, we'll assume it's served from a static path
-      return `/api/documents/${document.id}`;
-    };
-    
-    const isImageFile = (filename) => {
-      if (!filename) return false;
-      const ext = filename.split('.').pop().toLowerCase();
-      return ['jpg', 'jpeg', 'png', 'gif'].includes(ext);
+    const openDocument = async (documentId) => {
+      try {
+        // Fetch the document with proper authorization through API service
+        const response = await api.get(`/documents/${documentId}`, {
+          responseType: 'blob', 
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        });
+        
+        // Create a blob URL from the response data
+        const blob = new Blob([response.data], { type: response.headers['content-type']});
+        const bloburl = window.URL.createObjectURL(blob);
+        
+        // Open the blob URL in a new tab
+        window.open(bloburl, '_blank');
+      } catch (err) {
+        console.error('Failed to open document:', err);
+        documentError.value = 'Failed to open document. Please try again.';
+      }
     };
     
     const toggleVerification = async (document) => {
       try {
+        // Set the current document as being verified
+        verifyingDocId.value = document.id;
+        documentError.value = null;
+        
+        // Call the API with the opposite of current verification status
         const response = await api.put(`/admin/documents/${document.id}/verify`, {
           verified: !document.verified
         });
         
-        // Update the document in the array
-        const index = documents.value.findIndex(d => d.id === document.id);
-        if (index !== -1) {
-          documents.value[index].verified = !document.verified;
-        }
-        
-        // Update the professional's verification status if this was returned
-        if (response.data.all_verified !== undefined && selectedProfessional.value) {
-          const profIndex = pendingProfessionals.value.findIndex(p => p.id === selectedProfessional.value.id);
-          if (profIndex !== -1) {
-            pendingProfessionals.value[profIndex].documents_verified = response.data.all_verified;
+        // Only update the UI after backend confirms the change
+        if (response.data && response.data.document) {
+          // Update the document in the array using the returned data
+          const index = documents.value.findIndex(d => d.id === document.id);
+          if (index !== -1) {
+            documents.value[index].verified = response.data.document.verified;
           }
+          
+          // Update the professional's verification status if this was returned
+          if (response.data.all_verified !== undefined && selectedProfessional.value) {
+            const profIndex = pendingProfessionals.value.findIndex(p => p.id === selectedProfessional.value.id);
+            if (profIndex !== -1) {
+              pendingProfessionals.value[profIndex].documents_verified = response.data.all_verified;
+              
+              // Also update the documents_status for this document type
+              if (pendingProfessionals.value[profIndex].documents_status) {
+                pendingProfessionals.value[profIndex].documents_status[document.document_type] = 
+                  response.data.document.verified;
+              }
+            }
+          }
+          
+          showSuccessToast(
+            `Document ${response.data.document.verified ? 'verified' : 'unverified'} successfully`
+          );
         }
-        
-        showSuccessToast(`Document ${documents.value[index].verified ? 'verified' : 'unverified'} successfully`);
       } catch (err) {
         console.error('Failed to toggle document verification:', err);
         documentError.value = err.response?.data?.message || 'Failed to update document verification status';
+      } finally {
+        // Clear the verifying state regardless of success or failure
+        verifyingDocId.value = null;
       }
     };
 
     // Check if all professional documents are verified before allowing approval
     const isProfessionalApprovalReady = (professional) => {
-      // If the professional has documents_verified flag, use that
-      if (professional.documents_verified) {
+      console.log(`Checking approval readiness for professional ID ${professional.id}:`, professional);
+      
+      // Check if the professional object is valid
+      if (!professional) {
+        console.log("Invalid professional object");
+        return false;
+      }
+      
+      // First check: If the professional has explicit documents_verified flag, use that
+      if (professional.documents_verified === true) {
+        console.log(`Professional ${professional.id} has documents_verified=true flag`);
         return true;
       }
       
-      // If the documents are currently loaded for this professional, check directly
-      if (selectedProfessional.value && selectedProfessional.value.id === professional.id && documents.value.length > 0) {
-        // All documents must be verified
-        return documents.value.every(doc => doc.verified);
+      // If we've loaded documents for this professional, check them directly
+      if (
+        selectedProfessional.value && 
+        selectedProfessional.value.id === professional.id && 
+        documents.value.length > 0
+      ) {
+        console.log(`Checking ${documents.value.length} documents for professional ${professional.id}`);
+        
+        // Check if all three required document types exist and are verified
+        const requiredDocTypes = ['idProof', 'addressProof', 'qualification'];
+        const verifiedDocs = {};
+        
+        // Initialize all document types as false first
+        requiredDocTypes.forEach(type => {
+          verifiedDocs[type] = false;
+        });
+        
+        // Then mark the ones that are verified
+        documents.value.forEach(doc => {
+          console.log(`Document ${doc.id}, type: ${doc.document_type}, verified: ${doc.verified}`);
+          if (requiredDocTypes.includes(doc.document_type)) {
+            verifiedDocs[doc.document_type] = doc.verified === true;
+          }
+        });
+        
+        console.log("Verified status:", verifiedDocs);
+        
+        // Make sure all three document types exist and are verified
+        const isReady = requiredDocTypes.every(type => verifiedDocs[type] === true);
+        console.log(`Professional ${professional.id} approval readiness (based on documents): ${isReady}`);
+        return isReady;
       }
       
-      // By default, require checking documents first if they exist but aren't verified
-      return professional.documents_count === 0;
+      // Check if we have document status in the professional object
+      if (professional.documents_status) {
+        console.log("Documents status from API:", professional.documents_status);
+        
+        // Explicitly check all three required types
+        const requiredTypes = ['idProof', 'addressProof', 'qualification'];
+        const hasAllRequired = requiredTypes.every(type => 
+          typeof professional.documents_status[type] !== 'undefined'
+        );
+        
+        if (!hasAllRequired) {
+          console.log("Missing one or more required document types");
+          return false;
+        }
+        
+        // Check if all required documents are verified
+        const isReady = requiredTypes.every(type => 
+          professional.documents_status[type] === true
+        );
+        
+        console.log(`Professional ${professional.id} document status:`, 
+                   requiredTypes.map(t => `${t}: ${professional.documents_status[t]}`).join(', '));
+        console.log(`Professional ${professional.id} approval readiness (based on status): ${isReady}`);
+        return isReady;
+      }
+      
+      // By default, require checking documents first - not ready for approval
+      console.log(`Professional ${professional.id} is not ready for approval (no status info available)`);
+      return false;
     };
     
     const approveProfessional = async (professionalId) => {
@@ -537,12 +640,11 @@ export default {
       successMessage,
       successToast,
       isSingleProfessional,
+      verifyingDocId,
       fetchPendingProfessionals,
       refreshData,
       viewDocuments,
       openDocument,
-      getDocumentUrl,
-      isImageFile,
       toggleVerification,
       approveProfessional,
       openRejectModal,
@@ -570,13 +672,13 @@ export default {
 }
 
 .description {
-  max-height: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  line-clamp: 3;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
+  max-height: 100px;
 }
 
 .document-preview {
@@ -587,5 +689,15 @@ export default {
 
 .toast-container {
   z-index: 1090;
+}
+
+.verification-status {
+  font-size: 0.8rem;
+}
+
+.document-status-details {
+  font-size: 0.75rem;
+  text-align: left;
+  margin-left: 1.5rem;
 }
 </style>

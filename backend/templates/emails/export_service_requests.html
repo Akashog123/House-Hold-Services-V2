@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Service Requests CSV Export</title>
+        <style>
+            .container {
+                width: 100%;
+                margin: 0 auto;
+                text-align: center;
+                padding: 20px;
+                box-sizing: border-box;
+            }
+            .header {
+            color: #4a6bdf;
+        }
+            .cta-container {
+                text-align: center;
+                margin: 30px 0 15px;
+            }
+            .cta-button {
+                display: inline-block;
+                background-color: #4a6bdf;
+                color: #ffffff;
+                text-decoration: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 16px;
+                transition: background-color 0.2s;
+            }
+            .cta-button:hover {
+                background-color: #3a5bca;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1 class="header">CSV Export Ready</h1>
+            <p>Click the button below to download the exported CSV file.</p>
+            <div class="cta-container">
+                <a href="{{ download_link }}" download class="cta-button">
+                    Download CSV
+                </a>
+            </div>
+            <p>
+                &copy; 2025 HouseCare. All rights reserved.<br>
+                123 Main Street, Anytown, AN 12345
+            </p>
+        </div>
+    </body>
+</html>

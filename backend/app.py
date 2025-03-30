@@ -4,17 +4,27 @@ from flask_cors import CORS
 from .config import Config
 from .models import db, Admin, User
 from .auth import auth_bp
-from .routes import routes_bp
+from .public_routes import public_bp
+from .admin_routes import admin_bp
+from .customer_routes import customer_bp
+from .serviceProfessional_routes import professional_bp
+from .extensions import cache
 import os
+
 
 app = Flask(__name__, static_folder='../dist')
 app.config.from_object(Config)
+
 CORS(app, resources={
     r"/api/*": {
         "origins": ["http://localhost:5173"],
         "supports_credentials": True
     }
 })
+
+# Celery integration
+from backend.celery.celery_factory import celery_init_app
+celery = celery_init_app(app)
 
 # Add this to your Flask app configuration
 app.config['JWT_JSON_KEY_NAME'] = 'access_token'
@@ -23,6 +33,7 @@ app.config['JWT_IDENTITY_CLAIM'] = 'sub'
 # Initialize extensions
 jwt = JWTManager(app)
 db.init_app(app)
+cache.init_app(app)
 
 # Very important - make sure we're handling integer vs string conversions properly
 @jwt.user_identity_loader
@@ -47,7 +58,10 @@ def user_lookup_callback(_jwt_header, jwt_data):
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
-app.register_blueprint(routes_bp, url_prefix='/api')
+app.register_blueprint(public_bp, url_prefix='/api')
+app.register_blueprint(admin_bp, url_prefix='/api')
+app.register_blueprint(customer_bp, url_prefix='/api')
+app.register_blueprint(professional_bp, url_prefix='/api')
 
 @app.before_first_request
 def create_tables():
@@ -76,14 +90,13 @@ def api_index():
 def serve(path):
     """Serve frontend files or redirect to development server"""
     if app.debug:
-        # In development mode, redirect to the Vue dev server
         return redirect('http://localhost:5173/' + path)
     
-    # In production mode, serve the static files built by Vue
     if path and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, 'index.html')
+
 
 if __name__ == '__main__':
     app.run(debug=True)

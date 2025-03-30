@@ -1,4 +1,7 @@
+/* Additional style overrides to match the Home.vue theme */
+
 @import './base.css';
+@import './custom-styles.css';
 
 #app {
   width: 100%;
@@ -54,6 +57,16 @@
 }
 
 /* Override Bootstrap's primary color */
+:root {
+  --bs-primary: var(--primary);
+  --bs-primary-rgb: 0, 86, 179; /* RGB value of #0056b3 */
+  --bs-secondary: var(--secondary);
+  --bs-success: var(--success);
+  --bs-info: var(--info);
+  --bs-warning: var(--warning);
+  --bs-danger: var(--error);
+}
+
 .bg-primary {
   background-color: var(--primary) !important;
 }
@@ -106,6 +119,89 @@ a,
 .btn-outline-primary:active {
   background-color: var(--primary) !important;
   border-color: var(--primary) !important;
+}
+
+/* Typography */
+h1, .h1 {
+  font-size: var(--h1-size);
+  font-weight: var(--h1-weight);
+  line-height: var(--h1-line-height);
+  color: var(--text-primary);
+}
+
+h2, .h2 {
+  font-size: var(--h2-size);
+  font-weight: var(--h2-weight);
+  line-height: var(--h2-line-height);
+  color: var(--text-primary);
+}
+
+h3, .h3 {
+  font-size: var(--h3-size);
+  font-weight: var(--h3-weight);
+  line-height: var(--h3-line-height);
+  color: var(--text-primary);
+}
+
+h4, .h4 {
+  font-size: var(--h4-size);
+  font-weight: var(--h4-weight);
+  line-height: var(--h4-line-height);
+  color: var(--text-primary);
+}
+
+h5, .h5 {
+  font-size: var(--h5-size);
+  font-weight: var(--h5-weight);
+  line-height: var(--h5-line-height);
+  color: var(--text-primary);
+}
+
+h6, .h6 {
+  font-size: var(--h6-size);
+  font-weight: var(--h6-weight);
+  line-height: var(--h6-line-height);
+  color: var(--text-primary);
+}
+
+/* Navbar and sidebar enhancements */
+.nav-link {
+  transition: all 0.2s ease-in-out;
+}
+
+.nav-link:hover {
+  background-color: rgba(var(--bs-primary-rgb), 0.05);
+  color: var(--primary);
+}
+
+.nav-link.active {
+  color: var(--primary);
+  background-color: rgba(var(--bs-primary-rgb), 0.1);
+  font-weight: 500;
+}
+
+/* Error message styles */
+.error-container,
+.empty-container {
+  text-align: center;
+  padding: 4rem 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.error-message {
+  background-color: var(--status-cancelled);
+  color: var(--status-cancelled-text);
+  padding: 10px;
+  border-radius: var(--border-radius-sm);
+  margin-bottom: 15px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 @media (min-width: 1024px) {

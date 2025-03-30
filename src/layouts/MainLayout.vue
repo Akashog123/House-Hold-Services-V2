@@ -83,28 +83,18 @@
                       class="nav-link d-flex align-items-center"
                       active-class="active"
                     >
-                      <i class="bi bi-calendar-check me-2"></i>
-                      My Bookings
-                    </router-link>
-                  </li>
-                  <li class="nav-item">
-                    <router-link 
-                      to="/professional/services" 
-                      class="nav-link d-flex align-items-center"
-                      active-class="active"
-                    >
-                      <i class="bi bi-tools me-2"></i>
-                      My Services
-                    </router-link>
-                  </li>
-                  <li class="nav-item">
-                    <router-link 
-                      to="/professional/requests" 
-                      class="nav-link d-flex align-items-center"
-                      active-class="active"
-                    >
                       <i class="bi bi-list-check me-2"></i>
                       Service Requests
+                    </router-link>
+                  </li>
+                  <li class="nav-item">
+                    <router-link 
+                      to="/professional/history" 
+                      class="nav-link d-flex align-items-center"
+                      active-class="active"
+                    >
+                      <i class="bi bi-clock-history me-2"></i>
+                      Service History
                     </router-link>
                   </li>
                 </template>
@@ -132,28 +122,6 @@
                     </router-link>
                   </li>
                 </template>
-
-                <!-- Common Links -->
-                <li class="nav-item">
-                  <router-link 
-                    :to="profileRoute" 
-                    class="nav-link d-flex align-items-center"
-                    active-class="active"
-                  >
-                    <i class="bi bi-person me-2"></i>
-                    Profile
-                  </router-link>
-                </li>
-                <li class="nav-item">
-                  <router-link 
-                    :to="settingsRoute" 
-                    class="nav-link d-flex align-items-center"
-                    active-class="active"
-                  >
-                    <i class="bi bi-gear me-2"></i>
-                    Settings
-                  </router-link>
-                </li>
               </ul>
             </div>
           </nav>
@@ -168,6 +136,8 @@
         </div>
       </div>
     </main>
+    <!-- Add to Desktop Component -->
+    <AddToDesktop />
   </div>
 </template>
 
@@ -176,6 +146,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useStore } from 'vuex'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/layouts/Header.vue'
+import AddToDesktop from '@/components/common/AddToDesktop.vue'
 
 export default {
   name: 'MainLayout',
@@ -239,7 +210,7 @@ export default {
       if (isAdmin.value) return '/admin/dashboard'
       if (isProfessional.value) return '/professional/dashboard'
       if (isCustomer.value) return '/customer/dashboard'
-      return '/dashboard'
+      return '/'
     })
 
     // Routes for common menu items

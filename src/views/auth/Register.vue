@@ -148,17 +148,6 @@
                       rows="3"
                     ></textarea>
                   </div>
-                  
-                  <div class="mb-3">
-                    <label for="pinCode" class="form-label">PIN Code</label>
-                    <input
-                      v-model="formData.pinCode"
-                      type="text"
-                      class="form-control"
-                      id="pinCode"
-                      placeholder="Enter your PIN code"
-                    />
-                  </div>
                 </div>
                 
                 <!-- Professional specific fields -->
@@ -186,6 +175,17 @@
                       id="phone"
                       placeholder="Enter your phone number"
                       required
+                    />
+                  </div>
+
+                  <div class="mb-3">
+                    <label for="pinCode" class="form-label">PIN Code</label>
+                    <input
+                      v-model="formData.pinCode"
+                      type="text"
+                      class="form-control"
+                      id="pinCode"
+                      placeholder="Enter your PIN code"
                     />
                   </div>
                   
@@ -263,13 +263,14 @@
                       </div>
                       
                       <div>
-                        <label for="qualification" class="form-label">Qualification Certificate (Optional)</label>
+                        <label for="qualification" class="form-label">Qualification Certificate</label>
                         <input 
                           type="file" 
                           id="qualification" 
                           class="form-control"
                           @change="handleFileUpload($event, 'qualification')"
                           accept=".jpg,.jpeg,.png,.pdf"
+                          required
                         />
                         <div class="form-text">Upload any relevant qualification or training certificates</div>
                       </div>
@@ -376,8 +377,8 @@ export default {
           return false;
         }
         
-        if (!formData.value.documents.idProof || !formData.value.documents.addressProof) {
-          error.value = 'Please upload the required identity documents';
+        if (!formData.value.documents.idProof || !formData.value.documents.addressProof || !formData.value.documents.qualification) {
+          error.value = 'Please upload all required identity documents';
           return false;
         }
       }
@@ -409,8 +410,8 @@ export default {
         // Add role-specific fields
         if (role.value === 'customer') {
           formDataToSend.append('address', formData.value.address);
-          formDataToSend.append('pinCode', formData.value.pinCode);
         } else if (role.value === 'professional') {
+          formDataToSend.append('pinCode', formData.value.pinCode);
           formDataToSend.append('experienceYears', formData.value.experienceYears);
           formDataToSend.append('serviceTypeId', formData.value.serviceTypeId);
           formDataToSend.append('description', formData.value.description);

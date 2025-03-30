@@ -32,6 +32,16 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   config => {
+    // For debugging the services endpoint specifically
+    if (config.url === '/services') {
+      console.log('Making request to /services endpoint', {
+        url: config.url,
+        method: config.method,
+        baseURL: config.baseURL,
+        headers: config.headers
+      });
+    }
+    
     console.log(`DEBUG - API Request to: ${config.url}`);
     
     // Get token from the namespaced state using the getter
@@ -58,6 +68,15 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
   response => {
+    // Special handling for services endpoint
+    if (response.config.url === '/services') {
+      console.log(`Services API response:`, {
+        status: response.status,
+        dataCount: Array.isArray(response.data) ? response.data.length : 'not array',
+        firstItem: Array.isArray(response.data) && response.data.length > 0 ? response.data[0] : null
+      });
+    }
+    
     console.log(`DEBUG - Response from ${response.config.url}: Status ${response.status}`);
     return response;
   },

@@ -91,6 +91,46 @@ export default {
         commit('SET_ERROR', error.response?.data?.message || 'Failed to cancel booking')
         throw error
       }
+    },
+    async completeBooking({ commit, dispatch }, bookingId) {
+      try {
+        commit('SET_LOADING', true)
+        await api.put(`/customer/service-requests/${bookingId}/complete`)
+        commit('SET_LOADING', false)
+        // Refresh bookings list after completion
+        dispatch('fetchUserBookings')
+      } catch (error) {
+        commit('SET_LOADING', false)
+        commit('SET_ERROR', error.response?.data?.message || 'Failed to complete booking')
+        throw error
+      }
+    },
+    
+    async submitReview({ commit, dispatch }, { bookingId, reviewData }) {
+      try {
+        commit('SET_LOADING', true)
+        await api.post(`/customer/service-requests/${bookingId}/review`, reviewData)
+        commit('SET_LOADING', false)
+        // Refresh bookings list after review submission
+        dispatch('fetchUserBookings')
+      } catch (error) {
+        commit('SET_LOADING', false)
+        commit('SET_ERROR', error.response?.data?.message || 'Failed to submit review')
+        throw error
+      }
+    },
+    
+    async getReview({ commit }, bookingId) {
+      try {
+        commit('SET_LOADING', true)
+        const response = await api.get(`/customer/service-requests/${bookingId}/review`)
+        commit('SET_LOADING', false)
+        return response.data
+      } catch (error) {
+        commit('SET_LOADING', false)
+        commit('SET_ERROR', error.response?.data?.message || 'Failed to get review')
+        throw error
+      }
     }
   },
   getters: {

@@ -4,7 +4,6 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity, get_jwt
 )
 from .models import db, User, Document, ServiceProfessional, Customer, Service
-from .decorators import admin_required
 import jwt
 from datetime import datetime, timedelta
 import os
@@ -163,6 +162,7 @@ def register():
                 service_type_id = request.form.get('serviceTypeId')
                 description = request.form.get('description', '')
                 experience_years = request.form.get('experienceYears', 0)
+                pin_code = request.form.get('pinCode', '')
                 
                 print(f"DEBUG - Professional registration: service_type_id={service_type_id}")
                 
@@ -180,8 +180,9 @@ def register():
                     username=username,
                     email=email,
                     full_name=full_name,
-                    phone_number=phone_number,  # Ensure this matches the model field
+                    phone_number=phone_number,
                     description=description,
+                    pin_code=pin_code,
                     service_type_id=service_type_id,
                     experience_years=int(experience_years) if experience_years else 0,
                     is_approved=False  # Professionals need approval
@@ -193,11 +194,12 @@ def register():
                 qualification = request.files.get('qualification')
                 
                 print(f"DEBUG - Document files: id_proof={id_proof.filename if id_proof else None}, "
-                      f"address_proof={address_proof.filename if address_proof else None}")
+                      f"address_proof={address_proof.filename if address_proof else None}, "
+                      f"qualification={qualification.filename if qualification else None}")
                 
-                # Check required documents
-                if not id_proof or not address_proof:
-                    return jsonify({"message": "ID proof and address proof are required"}), 400
+                # Check all required documents
+                if not id_proof or not address_proof or not qualification:
+                    return jsonify({"message": "ID proof, address proof, and qualification documents are all required"}), 400
                 
                 # Set password and save user to get an ID
                 user.set_password(password)
@@ -212,14 +214,13 @@ def register():
                 if address_proof and allowed_file(address_proof.filename):
                     save_document(address_proof, user.id, 'addressProof')
                 
-                # Process optional qualification
+                # Process qualification
                 if qualification and allowed_file(qualification.filename):
                     save_document(qualification, user.id, 'qualification')
                     
             elif role == 'customer':
                 # Get customer-specific form data
                 address = request.form.get('address', '')
-                pin_code = request.form.get('pinCode', '')
                 
                 # Create customer user
                 user = Customer(
@@ -228,7 +229,6 @@ def register():
                     full_name=full_name,
                     phone_number=phone_number,
                     address=address,
-                    pin_code=pin_code,
                     is_approved=True  # Customers are auto-approved
                 )
             else:
@@ -283,6 +283,7 @@ def register():
                     full_name=data.get('full_name', '') or data.get('fullName', ''),
                     phone_number=data.get('phone_number', '') or data.get('phoneNumber', ''),
                     description=data.get('description', ''),
+                    pin_code=data.get('pin_code', '') or data.get('pinCode', ''),
                     service_type_id=service_type_id,
                     experience_years=data.get('experience_years', 0) or data.get('experienceYears', 0),
                     is_approved=False  # Professionals need approval
@@ -293,7 +294,6 @@ def register():
                     email=email,
                     full_name=data.get('full_name', '') or data.get('fullName', ''),
                     address=data.get('address', ''),
-                    pin_code=data.get('pin_code', '') or data.get('pinCode', ''),
                     phone_number=data.get('phone_number', '') or data.get('phoneNumber', ''),
                     is_approved=True  # Customers are auto-approved
                 )
@@ -327,17 +327,18 @@ def save_document(file, user_id, doc_type):
         
         # Create full path with timestamp to prevent overwriting
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        file_path = os.path.join(user_upload_dir, f'{doc_type}_{timestamp}_{filename}')
+        # Full path for saving to disk
+        full_path = os.path.join(user_upload_dir, f'{doc_type}_{timestamp}_{filename}')
         
         # Save the file
-        file.save(file_path)
+        file.save(full_path)
         
         # Create document record
         document = Document(
             professional_id=user_id,
             document_type=doc_type,
             filename=filename,
-            file_path=file_path,
+            file_path=full_path,
             verified=False
         )
         

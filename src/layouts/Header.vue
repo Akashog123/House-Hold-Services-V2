@@ -32,17 +32,6 @@
           </button>
           <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
             <li>
-              <router-link class="dropdown-item" :to="profileLink">
-                <i class="bi bi-person me-2"></i> Profile
-              </router-link>
-            </li>
-            <li>
-              <router-link class="dropdown-item" :to="settingsLink">
-                <i class="bi bi-gear me-2"></i> Settings
-              </router-link>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
               <a class="dropdown-item" href="#" @click.prevent="logout">
                 <i class="bi bi-box-arrow-right me-2"></i> Logout
               </a>
@@ -92,25 +81,6 @@ export default {
       return user?.role || null
     })
 
-    // Determine profile and settings links based on role
-    const profileLink = computed(() => {
-      switch (userRole.value) {
-        case 'admin': return '/admin/profile'
-        case 'professional': return '/professional/profile'
-        case 'customer': return '/customer/profile'
-        default: return '/profile'
-      }
-    })
-
-    const settingsLink = computed(() => {
-      switch (userRole.value) {
-        case 'admin': return '/admin/settings'
-        case 'professional': return '/professional/settings'
-        case 'customer': return '/customer/settings'
-        default: return '/settings'
-      }
-    })
-
     // Logout function
     const logout = async () => {
       try {
@@ -146,8 +116,6 @@ export default {
       isAuthenticated,
       username,
       userRole,
-      profileLink,
-      settingsLink,
       logout,
       userDropdownRef
     }
